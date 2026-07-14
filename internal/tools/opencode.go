@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -81,15 +82,19 @@ func newOpenCode() *Tool {
 			if a.Model != "" {
 				// Register every model the caller already fetched (e.g. the TUI wizard's
 				// picker list), not just a.Model, so OpenCode's own /models picker can
-				// switch between them without re-adding the profile. Falls back to the
-				// previously-registered list, then just a.Model, when the caller has no
-				// fetched list (e.g. the CLI --model flag or an edit of another field).
+				// switch between them without re-adding the profile. When the caller
+				// brings no fetched list (CLI --model flag, or an edit of another field)
+				// fall back to the previously-registered list so the picker doesn't
+				// collapse - but always ensure a.Model itself is registered, otherwise
+				// cfg["model"] ("charon/<a.Model>") would point at a model the provider
+				// doesn't list, and opencode can't select it (it silently falls back to
+				// its own default model).
 				ids := a.AllModels
 				if len(ids) == 0 {
 					ids = existingModels
 				}
-				if len(ids) == 0 {
-					ids = []string{a.Model}
+				if !slices.Contains(ids, a.Model) {
+					ids = append(ids, a.Model)
 				}
 				modelMap := make(map[string]any, len(ids))
 				for _, id := range ids {

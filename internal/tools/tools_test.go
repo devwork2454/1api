@@ -499,6 +499,61 @@ func TestOpenCodeDescribeAndApply(t *testing.T) {
 	}
 }
 
+// TestOpenCodeAppliesModelRegistersIt reproduces the CLI path (no fetched model
+// list) applying a new model id while the charon provider already lists a
+// different one: the active model must always be registered in the provider's
+// models map, otherwise cfg["model"] points at a model opencode can't select and
+// it silently falls back to its own default.
+func TestOpenCodeAppliesModelRegistersIt(t *testing.T) {
+	home := sandboxHome(t)
+	jsoncPath := filepath.Join(home, ".config", "opencode", "opencode.jsonc")
+	// Live config already has a charon provider with one previously-registered model.
+	writeFile(t, jsoncPath, `{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "charon/deepseek-v4-flash",
+  "provider": {
+    "charon": {
+      "name": "charon",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {"baseURL": "https://yunwu.ai", "apiKey": "sk-old"},
+      "models": {"deepseek-v4-flash": {"name": "deepseek-v4-flash"}}
+    }
+  }
+}`)
+
+	c := Find("opencode")
+	// CLI add/edit path: AllModels is empty, only a.Model is set to a new id.
+	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://yunwu.ai", Key: "sk-new", Model: "grok-4.5"}); err != nil {
+		t.Fatal(err)
+	}
+
+	var cfg struct {
+		Model    string `json:"model"`
+		Provider map[string]struct {
+			Models map[string]any `json:"models"`
+		} `json:"provider"`
+	}
+	cfgData, _ := os.ReadFile(jsoncPath)
+	if err := json.Unmarshal(cfgData, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Model != "charon/grok-4.5" {
+		t.Fatalf("model = %q, want %q", cfg.Model, "charon/grok-4.5")
+	}
+	p, ok := cfg.Provider["charon"]
+	if !ok {
+		t.Fatal("provider 'charon' missing")
+	}
+	if _, ok := p.Models["grok-4.5"]; !ok {
+		t.Errorf("active model %q not registered in provider models map %#v; opencode can't select it",
+			"grok-4.5", p.Models)
+	}
+	// The previously-registered model is preserved (non-destructive).
+	if _, ok := p.Models["deepseek-v4-flash"]; !ok {
+		t.Errorf("previously-registered model %q was dropped from models map", "deepseek-v4-flash")
+	}
+}
+
 func TestOpenCodeEditsExistingJsoncInPlace(t *testing.T) {
 	home := sandboxHome(t)
 	dir := filepath.Join(home, ".config", "opencode")
