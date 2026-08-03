@@ -45,19 +45,40 @@ switching away and back is always clean and reversible.
 
 ## API compatibility
 
-Charon configures each CLI with a **fixed wire format**. It does **not** auto-select an SDK from the URL — pick the tool that matches your gateway.
-
 | Tool | Model-list auth | What Charon writes into the CLI |
 |------|-----------------|----------------------------------|
 | **Codex** | OpenAI (`Authorization: Bearer`) | `model_providers.charon` · `wire_api: responses` · Bearer |
-| **OpenCode** | OpenAI Bearer | `@ai-sdk/openai-compatible` · `options.baseURL` / `apiKey` |
+| **OpenCode** | OpenAI **or** Anthropic (auto / `--wire`) | `@ai-sdk/openai-compatible` **or** `@ai-sdk/anthropic` · `options.baseURL` / `apiKey` |
 | **Pi** | OpenAI Bearer | `api: "openai-completions"` · `baseUrl` / `apiKey` |
 | **Claude Code** | Anthropic (`x-api-key`) | Official: `ANTHROPIC_API_KEY`. Custom base: `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` (Bearer) |
 
-**OpenAI-compatible** gateways (OpenRouter, LiteLLM OpenAI mode, local `/v1`, …) → use **codex / opencode / pi**.  
-**Anthropic-compatible** (official API or Anthropic-shaped proxies) → use **claude**.
+**OpenAI-compatible** gateways → **codex / opencode / pi**.  
+**Anthropic Messages** (official or proxy) → **claude**, or **OpenCode** with anthropic wire.
 
-If the URL looks like the wrong vendor (e.g. Codex + `api.anthropic.com`), CLI commands print a soft `note:` warning; the write still proceeds. Model discovery uses `GET /v1/models` and expects `{ "data": [ { "id": "..." } ] }`.
+### OpenCode dual wire
+
+OpenCode is the only tool that can switch SDK packages:
+
+| Wire | npm package | When |
+|------|-------------|------|
+| `openai` (default) | `@ai-sdk/openai-compatible` | OpenRouter, LiteLLM OpenAI mode, local `/v1`, … |
+| `anthropic` | `@ai-sdk/anthropic` | `api.anthropic.com` or any Anthropic-shaped gateway |
+
+- **Auto:** URL containing `api.anthropic.com` (or `anthropic.com/v1`) → anthropic wire; otherwise openai.
+- **Force:** `charon add opencode … --wire anthropic` (or `openai`) for generic gateway hosts.
+- Anthropic `baseURL` is normalized to end with `/v1` (OpenCode's AI SDK appends `/messages`).
+
+```sh
+# Official Anthropic (auto wire=anthropic)
+charon add opencode --name ant --endpoint https://api.anthropic.com \
+  --key sk-ant-... --model claude-sonnet-4-5
+
+# Custom Anthropic-compatible proxy (force wire)
+charon add opencode --name ant-gw --endpoint https://my-proxy.example.com \
+  --key sk-... --model claude-sonnet-4-5 --wire anthropic
+```
+
+If the URL looks wrong for a single-wire tool (e.g. Codex + `api.anthropic.com`), CLI prints a soft `note:`. Model discovery uses `GET /v1/models`.
 
 ## Supported platforms
 
