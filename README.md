@@ -43,6 +43,22 @@ switching away and back is always clean and reversible.
 | **OpenCode** | `~/.config/opencode/opencode.json` (`provider.*.options.baseURL`) | `~/.local/share/opencode/auth.json` |
 | **Pi** | `~/.pi/agent/extensions/charon.ts` (`pi.registerProvider("charon", ...)`) | `~/.pi/agent/auth.json` |
 
+## API compatibility
+
+Charon configures each CLI with a **fixed wire format**. It does **not** auto-select an SDK from the URL — pick the tool that matches your gateway.
+
+| Tool | Model-list auth | What Charon writes into the CLI |
+|------|-----------------|----------------------------------|
+| **Codex** | OpenAI (`Authorization: Bearer`) | `model_providers.charon` · `wire_api: responses` · Bearer |
+| **OpenCode** | OpenAI Bearer | `@ai-sdk/openai-compatible` · `options.baseURL` / `apiKey` |
+| **Pi** | OpenAI Bearer | `api: "openai-completions"` · `baseUrl` / `apiKey` |
+| **Claude Code** | Anthropic (`x-api-key`) | Official: `ANTHROPIC_API_KEY`. Custom base: `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` (Bearer) |
+
+**OpenAI-compatible** gateways (OpenRouter, LiteLLM OpenAI mode, local `/v1`, …) → use **codex / opencode / pi**.  
+**Anthropic-compatible** (official API or Anthropic-shaped proxies) → use **claude**.
+
+If the URL looks like the wrong vendor (e.g. Codex + `api.anthropic.com`), CLI commands print a soft `note:` warning; the write still proceeds. Model discovery uses `GET /v1/models` and expects `{ "data": [ { "id": "..." } ] }`.
+
 ## Supported platforms
 
 | OS | Status | Notes |
@@ -203,6 +219,10 @@ charon models codex --endpoint https://openrouter.ai/api/v1 --key sk-...
 charon add    codex --name openrouter --endpoint https://openrouter.ai/api/v1 \
                     --key sk-... --model openai/gpt-5.5
 ```
+
+`charon add` / `charon edit` also try to fetch the model list (same as the TUI
+wizard) and, for OpenCode/Pi, register the full set in the tool's own picker.
+If the fetch fails, the profile is still written and a `warning:` is printed.
 
 Each tool gets a dedicated `charon` provider entry written into its own config
 format (Codex `[model_providers.charon]`, Claude `env.ANTHROPIC_*`, OpenCode an
