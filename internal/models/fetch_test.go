@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -71,14 +72,28 @@ func TestFetchAnthropic(t *testing.T) {
 	}
 }
 
-func TestFetchHTTPError(t *testing.T) {
+func TestFetchHTTPErrorBody(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		http.Error(w, "nope", http.StatusUnauthorized)
+		http.Error(w, `{"error":"invalid_api_key"}`, http.StatusUnauthorized)
 	}))
 	defer srv.Close()
 
-	if _, err := Fetch(OpenAI, srv.URL, "bad"); err == nil {
+	_, err := Fetch(OpenAI, srv.URL, "bad")
+	if err == nil {
 		t.Fatal("expected error on 401, got nil")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "401") {
+		t.Errorf("error should mention status, got %q", msg)
+	}
+	if !strings.Contains(msg, "invalid_api_key") {
+		t.Errorf("error should include body snippet, got %q", msg)
+	}
+}
+
+func TestFetchEmptyKey(t *testing.T) {
+	if _, err := Fetch(OpenAI, "https://example.com/v1", "  "); err == nil {
+		t.Fatal("expected error on empty key")
 	}
 }
 
@@ -90,5 +105,17 @@ func TestFetchEmptyList(t *testing.T) {
 
 	if _, err := Fetch(OpenAI, srv.URL, "k"); err == nil {
 		t.Fatal("expected error on empty model list, got nil")
+	}
+}
+
+func TestSnippet(t *testing.T) {
+	got := snippet([]byte("  hello\n  world  "), 100)
+	if got != "hello world" {
+		t.Errorf("snippet collapsed = %q", got)
+	}
+	long := strings.Repeat("a", 300)
+	got = snippet([]byte(long), 10)
+	if !strings.HasSuffix(got, "…") || !strings.HasPrefix(got, "aaaaaaaaaa") {
+		t.Errorf("snippet truncate = %q", got)
 	}
 }
