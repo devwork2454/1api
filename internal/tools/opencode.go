@@ -70,12 +70,19 @@ func newOpenCode() *Tool {
 				}
 			}
 
-			options := map[string]any{"baseURL": a.Endpoint}
+			wire := ResolveWire(nil, a.Endpoint, a.Wire)
+			baseURL := a.Endpoint
+			npmPkg := "@ai-sdk/openai-compatible"
+			if wire == WireAnthropic {
+				npmPkg = "@ai-sdk/anthropic"
+				baseURL = NormalizeAnthropicBaseURL(a.Endpoint)
+			}
+			options := map[string]any{"baseURL": baseURL}
 			if a.Key != "" {
 				options["apiKey"] = a.Key
 			}
 			entry := map[string]any{
-				"npm":     "@ai-sdk/openai-compatible",
+				"npm":     npmPkg,
 				"name":    "charon",
 				"options": options,
 			}

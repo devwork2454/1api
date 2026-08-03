@@ -322,6 +322,48 @@ func contains(list []string, s string) bool {
 	return false
 }
 
+func TestOpenCodeApplyAuthAnthropicWire(t *testing.T) {
+	home := sandboxHome(t)
+	writeFile(t, filepath.Join(home, ".config", "opencode", "opencode.jsonc"), `{"$schema":"https://opencode.ai/config.json"}`)
+
+	oc := Find("opencode")
+	err := oc.ApplyAuth(AuthSpec{
+		Endpoint:  "https://anthropic-proxy.example.com",
+		Key:       "sk-ant-test",
+		Model:     "claude-sonnet-4-5",
+		AllModels: []string{"claude-sonnet-4-5", "claude-haiku-4-5"},
+		Wire:      WireAnthropic,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(home, ".config", "opencode", "opencode.jsonc"))
+	body := string(data)
+	if !strings.Contains(body, "@ai-sdk/anthropic") {
+		t.Errorf("want anthropic npm package, got:\n%s", body)
+	}
+	if !strings.Contains(body, "https://anthropic-proxy.example.com/v1") {
+		t.Errorf("want baseURL with /v1, got:\n%s", body)
+	}
+	if strings.Contains(body, "@ai-sdk/openai-compatible") {
+		t.Errorf("must not keep openai-compatible package:\n%s", body)
+	}
+}
+
+func TestOpenCodeApplyAuthOpenAIWireDefault(t *testing.T) {
+	home := sandboxHome(t)
+	writeFile(t, filepath.Join(home, ".config", "opencode", "opencode.jsonc"), `{}`)
+
+	oc := Find("opencode")
+	if err := oc.ApplyAuth(AuthSpec{Endpoint: "https://openrouter.ai/api/v1", Key: "sk-or", Model: "gpt-x"}); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(home, ".config", "opencode", "opencode.jsonc"))
+	if !strings.Contains(string(data), "@ai-sdk/openai-compatible") {
+		t.Errorf("default wire should be openai-compatible:\n%s", data)
+	}
+}
+
 func TestClaudeCustomEndpointUsesBearer(t *testing.T) {
 	home := sandboxHome(t)
 	writeFile(t, filepath.Join(home, ".claude", "settings.json"), `{}`)

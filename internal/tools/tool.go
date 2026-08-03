@@ -35,6 +35,7 @@ type AuthSpec struct {
 	Key       string
 	Model     string
 	AllModels []string // full fetched model list (e.g. TUI wizard's picker results); "" entries not included
+	Wire      string   // openai | anthropic | empty=auto (OpenCode)
 }
 
 // Tool describes one AI CLI's auth surface and how to summarize/reconfigure it.
