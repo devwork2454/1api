@@ -1128,3 +1128,239 @@ func TestSnapshotVerification(t *testing.T) {
 		t.Errorf("backed up content = %q, want %q", string(data), "c1")
 	}
 }
+
+// TestOpenCodeSwitchOverwritesJSONCWithComments locks the bug where live
+// opencode.jsonc contains // comments: Merge used to fail parse and leave
+// snapshot-only writes that then got "refreshed" back from unparseable live,
+// so switch appeared to only update ~/.config/charon/profiles.
+func TestOpenCodeSwitchOverwritesJSONCWithComments(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USER", "tester")
+
+	livePath := filepath.Join(home, ".config", "opencode", "opencode.jsonc")
+	if err := os.MkdirAll(filepath.Dir(livePath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// Live config with comments + manual endpoint.
+	live := `{
+  "$schema": "https://opencode.ai/config.json",
+  "theme": "manual-theme",
+  "model": "charon/manual",
+  "provider": {
+    "charon": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "charon",
+      "options": {"baseURL": "https://manual.example/v1", "apiKey": "sk-manual"},
+      "models": {"manual": {"name": "manual"}}
+    }
+  },
+  "agent": {
+    "compaction": {
+      // comment
+      "model": "charon/low"
+    }
+  }
+}
+`
+	if err := os.WriteFile(livePath, []byte(live), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	tool := tools.Find("opencode")
+	if tool == nil {
+		t.Fatal("opencode not registered")
+	}
+	s := newStore(t)
+	if err := s.EnsureDefault(tool); err != nil {
+		t.Fatal(err)
+	}
+	// Snapshot current (commented) live as profile "manual", then add "target".
+	if err := s.SaveWithSpec(tool, "manual", Spec{
+		Endpoint: "https://manual.example/v1",
+		Key:      "sk-manual",
+		Model:    "manual",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetActiveName(tool.Name, "manual"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Build target profile via ApplyAuth + Save (pure JSON after apply).
+	if err := tool.ApplyAuth(tools.AuthSpec{
+		Endpoint: "https://target.example/v1",
+		Key:      "sk-target",
+		Model:    "target-model",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveWithSpec(tool, "target", Spec{
+		Endpoint: "https://target.example/v1",
+		Key:      "sk-target",
+		Model:    "target-model",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetActiveName(tool.Name, "target"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Re-inject comments into live (user hand-edit) while active is target.
+	// Then switch to manual — must overwrite provider/model owned keys.
+	if err := os.WriteFile(livePath, []byte(`{
+  "$schema": "https://opencode.ai/config.json",
+  "theme": "after-hand-edit",
+  "model": "charon/hand",
+  "provider": {
+    "charon": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "charon",
+      "options": {"baseURL": "https://hand.example/v1", "apiKey": "sk-hand"},
+      "models": {"hand": {"name": "hand"}}
+    }
+  },
+  "agent": {
+    "compaction": {
+      // still comments
+      "model": "charon/low"
+    }
+  }
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.Apply(tool, "manual"); err != nil {
+		t.Fatalf("Apply manual over commented live: %v", err)
+	}
+
+	data, err := os.ReadFile(livePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("live after switch must be pure JSON: %v\n%s", err, data)
+	}
+	if cfg["model"] != "charon/manual" {
+		t.Errorf("model = %v, want charon/manual (profile owned)", cfg["model"])
+	}
+	prov, _ := cfg["provider"].(map[string]any)
+	charon, _ := prov["charon"].(map[string]any)
+	opts, _ := charon["options"].(map[string]any)
+	if opts["baseURL"] != "https://manual.example/v1" {
+		t.Errorf("baseURL = %v, want manual profile endpoint", opts["baseURL"])
+	}
+	if opts["apiKey"] != "sk-manual" {
+		t.Errorf("apiKey = %v, want sk-manual", opts["apiKey"])
+	}
+	// theme is non-owned — live hand-edit theme should survive merge
+	if cfg["theme"] != "after-hand-edit" {
+		t.Errorf("theme = %v, want after-hand-edit preserved", cfg["theme"])
+	}
+}
+
+// TestOpenCodeSwitchRestoresTieredAgents verifies that after ApplyAuth writes
+// mid/low/high routing into live opencode.jsonc, a later switch to that profile
+// restores model/small_model/agent over a hand-edited live file.
+func TestOpenCodeSwitchRestoresTieredAgents(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USER", "tester")
+
+	livePath := filepath.Join(home, ".config", "opencode", "opencode.jsonc")
+	if err := os.MkdirAll(filepath.Dir(livePath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// Seed agent.oracle so ApplyAuth can re-tier it to high and the snapshot stores it.
+	if err := os.WriteFile(livePath, []byte(`{
+  "$schema": "https://opencode.ai/config.json",
+  "theme": "t",
+  "agent": {
+    "oracle": {"model": "charon/placeholder"},
+    "build": {"model": "charon/placeholder"}
+  }
+}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	tool := tools.Find("opencode")
+	if tool == nil {
+		t.Fatal("opencode missing")
+	}
+	s := newStore(t)
+	if err := s.EnsureDefault(tool); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tool.ApplyAuth(tools.AuthSpec{
+		Endpoint:  "https://tier.example/v1",
+		Key:       "sk-tier",
+		Model:     "mid",
+		AllModels: []string{"low", "mid", "high"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveWithSpec(tool, "tiered", Spec{
+		Endpoint: "https://tier.example/v1",
+		Key:      "sk-tier",
+		Model:    "mid",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Keep a different profile active so switchTo's refreshMergerArtifacts does not
+	// pull the hand-edit into the tiered snapshot before restore (refresh only
+	// updates the *active* profile).
+	if err := s.SetActiveName(tool.Name, DefaultName); err != nil {
+		t.Fatal(err)
+	}
+
+	// Hand-edit live away from the profile.
+	if err := os.WriteFile(livePath, []byte(`{
+  "theme": "hand",
+  "model": "charon/wrong",
+  "small_model": "charon/wrong-low",
+  "agent": {"compaction": {"model": "charon/wrong-low"}, "oracle": {"model": "charon/wrong-high"}},
+  "provider": {"charon": {"options": {"baseURL": "https://wrong/", "apiKey": "sk-wrong"}, "models": {"wrong": {"name": "wrong"}}}}
+}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.Apply(tool, "tiered"); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	data, err := os.ReadFile(livePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("parse live: %v\n%s", err, data)
+	}
+	if cfg["model"] != "charon/mid" {
+		t.Errorf("model = %v, want charon/mid", cfg["model"])
+	}
+	if cfg["small_model"] != "charon/low" {
+		t.Errorf("small_model = %v, want charon/low", cfg["small_model"])
+	}
+	if cfg["theme"] != "hand" {
+		t.Errorf("theme = %v, want hand (non-owned)", cfg["theme"])
+	}
+	agent, _ := cfg["agent"].(map[string]any)
+	comp, _ := agent["compaction"].(map[string]any)
+	if comp["model"] != "charon/low" {
+		t.Errorf("compaction = %#v", comp)
+	}
+	oracle, _ := agent["oracle"].(map[string]any)
+	if oracle["model"] != "charon/high" {
+		t.Errorf("oracle = %#v", oracle)
+	}
+	prov, _ := cfg["provider"].(map[string]any)
+	charon, _ := prov["charon"].(map[string]any)
+	opts, _ := charon["options"].(map[string]any)
+	if opts["baseURL"] != "https://tier.example/v1" || opts["apiKey"] != "sk-tier" {
+		t.Errorf("provider options = %#v", opts)
+	}
+}

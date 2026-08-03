@@ -1,7 +1,6 @@
 package tools
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -9,6 +8,7 @@ import (
 	"strings"
 
 	"charon/internal/artifact"
+	"charon/internal/jsonc"
 )
 
 // opencodeConfigPath returns the existing config (opencode.jsonc, else legacy
@@ -96,14 +96,22 @@ func newOpenCode() *Tool {
 				if !slices.Contains(ids, a.Model) {
 					ids = append(ids, a.Model)
 				}
+				tiers := resolveOpenCodeTiers(a.Model, ids)
+				for _, id := range []string{tiers.Mid, tiers.Low, tiers.High} {
+					if id != "" && !slices.Contains(ids, id) {
+						ids = append(ids, id)
+					}
+				}
 				modelMap := make(map[string]any, len(ids))
 				for _, id := range ids {
 					modelMap[id] = map[string]any{"name": id}
 				}
 				entry["models"] = modelMap
-				cfg["model"] = "charon/" + a.Model
+				provider["charon"] = entry
+				applyOpenCodeTierRouting(cfg, tiers)
+			} else {
+				provider["charon"] = entry
 			}
-			provider["charon"] = entry
 
 			// Fail loudly rather than risk clobbering a user-authored provider.
 			if err := ensureOnlyCharonChanged(original, provider); err != nil {
@@ -138,7 +146,7 @@ func newOpenCode() *Tool {
 						} `json:"options"`
 					} `json:"provider"`
 				}
-				if json.Unmarshal(data, &cfg) == nil {
+				if jsonc.Unmarshal(data, &cfg) == nil {
 					info.Model = strings.TrimPrefix(cfg.Model, "charon/")
 					if info.Model == "" {
 						info.Model = strings.TrimPrefix(cfg.SmallModel, "charon/")
@@ -203,7 +211,7 @@ func newOpenCode() *Tool {
 					Key    string `json:"key"`
 					Access string `json:"access"` // oauth: access token, sometimes a JWT (e.g. ChatGPT via /connect)
 				}
-				if json.Unmarshal(data, &auth) == nil {
+				if jsonc.Unmarshal(data, &auth) == nil {
 					names := make([]string, 0, len(auth))
 					for name := range auth {
 						names = append(names, name)
