@@ -5,10 +5,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mingtheanlay/charon/releases/latest"><img src="https://img.shields.io/github/v/release/mingtheanlay/charon?style=flat-square&color=6c47ff" alt="Latest Release"></a>
-  <a href="https://github.com/mingtheanlay/charon/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/mingtheanlay/charon/ci.yml?branch=main&style=flat-square&label=CI" alt="CI"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/mingtheanlay/charon?style=flat-square" alt="MIT License"></a>
-  <a href="https://github.com/mingtheanlay/charon/issues"><img src="https://img.shields.io/github/issues/mingtheanlay/charon?style=flat-square" alt="Open Issues"></a>
+  <a href="https://github.com/devwork2454/charon/releases/latest"><img src="https://img.shields.io/github/v/release/devwork2454/charon?style=flat-square&color=6c47ff" alt="Latest Release"></a>
+  <a href="https://github.com/devwork2454/charon/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/devwork2454/charon/ci.yml?branch=main&style=flat-square&label=CI" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/devwork2454/charon?style=flat-square" alt="MIT License"></a>
+  <a href="https://github.com/devwork2454/charon/issues"><img src="https://img.shields.io/github/issues/devwork2454/charon?style=flat-square" alt="Open Issues"></a>
 </p>
 
 Charon is a tiny Go CLI that detects the **Codex**, **Claude Code**,
@@ -62,27 +62,24 @@ No Go needed — downloads the prebuilt binary for your platform, verifies its
 checksum, and installs to `~/.local/bin`:
 
 ```sh
-curl -fsSL https://github.com/mingtheanlay/charon/releases/latest/download/install.sh | sh
+curl -fsSL https://github.com/devwork2454/charon/releases/latest/download/install.sh | sh
 ```
 
 > Prepend `PREFIX=/usr/local` to install system-wide, or `VERSION=v1.2.3` to pin a release.
-
-### Homebrew (macOS & Linux)
-
-```sh
-brew install --cask mtty80/tap/charon
-```
+> This line installs from **this fork's** releases (includes local fixes such as
+> OpenCode active-model registration). Upstream official installs use
+> `mingtheanlay/charon` instead.
 
 <details>
-<summary><b>Other methods</b> — manual binary · build from source</summary>
+<summary><b>Other methods</b> — manual binary · build from source · upstream</summary>
 
 **Pre-built binary** — grab your platform's archive from the
-[Releases page](https://github.com/mingtheanlay/charon/releases/latest)
+[Releases page](https://github.com/devwork2454/charon/releases/latest)
 (`charon_{darwin,linux}_{amd64,arm64}.tar.gz`) and verify it against the included
 `checksums.txt`:
 
 ```sh
-curl -L https://github.com/mingtheanlay/charon/releases/latest/download/charon_darwin_arm64.tar.gz | tar xz
+curl -L https://github.com/devwork2454/charon/releases/latest/download/charon_linux_amd64.tar.gz | tar xz
 sudo mv charon /usr/local/bin/
 ```
 

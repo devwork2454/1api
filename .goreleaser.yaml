@@ -41,37 +41,12 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
-# Publishes/updates the Homebrew cask automatically on each release.
-# `brews` (Formula-based) is deprecated by GoReleaser in favor of `homebrew_casks`.
-homebrew_casks:
-  - name: charon
-    repository:
-      owner: mtty80
-      name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    homepage: "https://github.com/mingtheanlay/charon"
-    description: "Switch Codex, Claude Code and OpenCode between endpoint + credential profiles"
-    # Shown by `brew info --cask charon` — point users at the no-Homebrew curl installer.
-    caveats: |
-      Not using Homebrew? Install with one line on Linux or macOS:
-        curl -fsSL https://github.com/mingtheanlay/charon/releases/latest/download/install.sh | sh
-    completions:
-      bash: completions/charon.bash
-      zsh: completions/charon.zsh
-      fish: completions/charon.fish
-    # The binary is unsigned/unnotarized, so macOS quarantines it on download
-    # and refuses to run it ("charon is damaged") unless the quarantine
-    # attribute is stripped after install.
-    hooks:
-      post:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/charon"]
-          end
+# Homebrew cask publish is intentionally omitted on this fork (no tap token).
+# Install via curl from the GitHub release assets instead.
 
 release:
   github:
-    owner: mingtheanlay
+    owner: devwork2454
     name: charon
   # Attach the curl installer to each release so it can be fetched from the
   # release CDN (github.com/.../releases/latest/download/install.sh) instead of

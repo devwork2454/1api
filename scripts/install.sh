@@ -2,9 +2,10 @@
 # install.sh — download a prebuilt charon binary and put it on your PATH.
 #
 # Quick install (Linux & macOS, no Go required):
-#   curl -fsSL https://github.com/mingtheanlay/charon/releases/latest/download/install.sh | sh
+#   curl -fsSL https://github.com/devwork2454/charon/releases/latest/download/install.sh | sh
 #
 # Options (environment variables):
+#   REPO=owner/name     GitHub repo that hosts the release assets (default: this fork)
 #   PREFIX=/usr/local   install under <PREFIX>/bin instead of ~/.local (may need sudo)
 #   VERSION=v1.2.3      install a specific release instead of the latest
 #
@@ -12,7 +13,7 @@
 
 set -eu
 
-REPO="mingtheanlay/charon"
+REPO="${REPO:-devwork2454/charon}"
 BINARY="charon"
 PREFIX="${PREFIX:-$HOME/.local}"
 BINDIR="$PREFIX/bin"
