@@ -16,6 +16,9 @@ var version = "dev"
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
+		if ee, ok := err.(*exitError); ok {
+			os.Exit(ee.code)
+		}
 		fmt.Fprintln(os.Stderr, "charon: "+err.Error())
 		os.Exit(1)
 	}
@@ -59,6 +62,10 @@ func run(args []string) error {
 		return cmdList(store, args[1:])
 	case "switch", "use":
 		return cmdSwitch(store, args[1:])
+	case "run":
+		return cmdRun(store, args[1:])
+	case "alias":
+		return cmdAlias(args[1:])
 	case "restore":
 		return cmdSwitch(store, append([]string{argAt(args, 1)}, profile.DefaultName))
 	case "undo":
@@ -114,6 +121,10 @@ Usage:
   charon rename <tool> <o> <n>  rename a saved profile
   charon cp <tool> <src> <dst>  duplicate a saved profile
   charon switch <tool> <p>   apply a saved profile (backs up current first)
+  charon run <tool> <p>      start tool with profile in a temp HOME (session only)
+                             codex/opencode; --keep retains the sandbox dir
+  charon alias <tool> <p>    print a shell function wrapping charon run
+                             [--name NAME] [--shell bash|zsh|fish]
   charon restore <tool>      revert to the auto-captured default
   charon undo <tool>         revert to the most recent pre-switch backup
   charon prune <tool>        delete old backups, keeping the newest (--keep N)
@@ -123,5 +134,6 @@ Usage:
   charon uninstall           remove the installed charon binary
 
 Tools: codex, claude, opencode, pi
+Session run: codex, opencode
 `)
 }

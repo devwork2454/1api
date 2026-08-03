@@ -112,6 +112,8 @@ charon edit <tool> <p>       # change a profile's endpoint/key/model (--name to 
 charon rename <tool> <o> <n> # rename a saved profile
 charon cp <tool> <src> <dst> # duplicate a saved profile
 charon switch <tool> <p>     # apply a saved profile (backs up current first)
+charon run <tool> <p> [--]   # start tool with profile in a temp HOME (codex/opencode)
+charon alias <tool> <p>      # print a shell function wrapping charon run
 charon restore <tool>        # revert to the auto-captured default
 charon undo <tool>           # revert to the most recent pre-switch backup
 charon prune <tool>          # delete old backups, keeping the newest (--keep N, default 10)

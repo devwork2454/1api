@@ -9,8 +9,9 @@ _charon() {
     local cur cword cmds tools sub
     cur="${COMP_WORDS[COMP_CWORD]}"
     cword=$COMP_CWORD
-    cmds="status ls save models add edit rename cp switch use restore undo prune rm completion version help"
+    cmds="status ls save models add edit rename cp switch use run alias restore undo prune rm completion version help"
     tools="codex claude opencode pi"
+    session_tools="codex opencode"
 
     if [ "$cword" -eq 1 ]; then
         COMPREPLY=( $(compgen -W "$cmds" -- "$cur") )
@@ -19,9 +20,13 @@ _charon() {
 
     sub="${COMP_WORDS[1]}"
     case "$sub" in
-        switch|use|rm|edit|rename|cp)
+        switch|use|rm|edit|rename|cp|run|alias)
             if [ "$cword" -eq 2 ]; then
-                COMPREPLY=( $(compgen -W "$tools" -- "$cur") )
+                if [ "$sub" = "run" ] || [ "$sub" = "alias" ]; then
+                    COMPREPLY=( $(compgen -W "$session_tools" -- "$cur") )
+                else
+                    COMPREPLY=( $(compgen -W "$tools" -- "$cur") )
+                fi
             elif [ "$cword" -eq 3 ]; then
                 COMPREPLY=( $(compgen -W "$(charon __profiles "${COMP_WORDS[2]}" 2>/dev/null)" -- "$cur") )
             fi
@@ -45,8 +50,9 @@ const zshCompletion = `#compdef charon
 # zsh completion for charon
 _charon() {
     local -a cmds tools
-    cmds=(status ls save models add edit rename cp switch use restore undo prune rm completion version help)
+    cmds=(status ls save models add edit rename cp switch use run alias restore undo prune rm completion version help)
     tools=(codex claude opencode pi)
+    session_tools=(codex opencode)
 
     if (( CURRENT == 2 )); then
         compadd -- $cmds
@@ -57,6 +63,13 @@ _charon() {
         switch|use|rm|edit|rename|cp)
             if (( CURRENT == 3 )); then
                 compadd -- $tools
+            elif (( CURRENT == 4 )); then
+                compadd -- ${(f)"$(charon __profiles ${words[3]} 2>/dev/null)"}
+            fi
+            ;;
+        run|alias)
+            if (( CURRENT == 3 )); then
+                compadd -- $session_tools
             elif (( CURRENT == 4 )); then
                 compadd -- ${(f)"$(charon __profiles ${words[3]} 2>/dev/null)"}
             fi
@@ -77,7 +90,7 @@ function __charon_needs_tool
     set -l cmd (commandline -opc)
     if test (count $cmd) -eq 2
         switch $cmd[2]
-            case switch use rm edit rename cp ls save models add status undo prune restore
+            case switch use rm edit rename cp run alias ls save models add status undo prune restore
                 return 0
         end
     end
@@ -88,7 +101,7 @@ function __charon_needs_profile
     set -l cmd (commandline -opc)
     if test (count $cmd) -eq 3
         switch $cmd[2]
-            case switch use rm edit rename cp
+            case switch use rm edit rename cp run alias
                 return 0
         end
     end
@@ -103,7 +116,7 @@ function __charon_profiles
 end
 
 complete -c charon -f
-complete -c charon -n '__fish_use_subcommand' -a 'status ls save models add edit rename cp switch use restore undo prune rm completion version help'
+complete -c charon -n '__fish_use_subcommand' -a 'status ls save models add edit rename cp switch use run alias restore undo prune rm completion version help'
 complete -c charon -n '__charon_needs_tool' -a 'codex claude opencode pi'
 complete -c charon -n '__charon_needs_profile' -a '(__charon_profiles)'
 `
