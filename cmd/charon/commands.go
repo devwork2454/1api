@@ -298,6 +298,21 @@ func cmdPrune(store *profile.Store, args []string) error {
 	return nil
 }
 
+func discoverModels(t *tools.Tool, endpoint, key string) []string {
+	list, err := models.Fetch(models.Provider(t.Provider), t.ResolveEndpoint(endpoint), key)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not list models: %v\n", err)
+		return nil
+	}
+	return list
+}
+
+func noteWireHint(t *tools.Tool, endpoint string) {
+	if hint := tools.WireHint(t, endpoint); hint != "" {
+		fmt.Fprintln(os.Stderr, "note: "+hint)
+	}
+}
+
 func cmdModels(args []string) error {
 	if len(args) < 1 {
 		return fmt.Errorf("usage: charon models <tool> --key <key> [--endpoint <url>]")
@@ -318,7 +333,9 @@ func cmdModels(args []string) error {
 	if err := tools.ValidateEndpoint(*endpoint); err != nil {
 		return err
 	}
-	list, err := models.Fetch(models.Provider(t.Provider), t.ResolveEndpoint(*endpoint), *key)
+	ep := t.ResolveEndpoint(*endpoint)
+	noteWireHint(t, ep)
+	list, err := models.Fetch(models.Provider(t.Provider), ep, *key)
 	if err != nil {
 		return err
 	}
@@ -357,7 +374,11 @@ func cmdAdd(store *profile.Store, args []string) error {
 		return err
 	}
 	ep := t.ResolveEndpoint(*endpoint)
-	if err := store.AddProfile(t, *name, profile.Spec{Endpoint: ep, Key: *key, Model: *model}); err != nil {
+	noteWireHint(t, ep)
+	// Match the TUI wizard: seed OpenCode/Pi model pickers with the full list when
+	// the endpoint answers GET /v1/models. Failure is non-fatal (warn only).
+	allModels := discoverModels(t, ep, *key)
+	if err := store.AddProfile(t, *name, profile.Spec{Endpoint: ep, Key: *key, Model: *model}, allModels...); err != nil {
 		return err
 	}
 	fmt.Printf("Added and activated %s profile %q (%s · %s)\n", t.Title, *name, ep, *model)
@@ -396,10 +417,13 @@ func cmdEdit(store *profile.Store, args []string) error {
 	if err := tools.ValidateEndpoint(*endpoint); err != nil {
 		return err
 	}
-	if err := store.EditProfile(t, name, target, profile.Spec{Endpoint: *endpoint, Key: *key, Model: *model}); err != nil {
+	ep := t.ResolveEndpoint(*endpoint)
+	noteWireHint(t, ep)
+	allModels := discoverModels(t, ep, *key)
+	if err := store.EditProfile(t, name, target, profile.Spec{Endpoint: ep, Key: *key, Model: *model}, allModels...); err != nil {
 		return err
 	}
-	fmt.Printf("Updated %s profile %q (%s · %s)\n", t.Title, target, t.ResolveEndpoint(*endpoint), *model)
+	fmt.Printf("Updated %s profile %q (%s · %s)\n", t.Title, target, ep, *model)
 	return nil
 }
 
