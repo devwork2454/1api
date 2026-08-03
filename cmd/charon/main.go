@@ -130,7 +130,8 @@ Usage:
   charon prune <tool>        delete old backups, keeping the newest (--keep N)
   charon rm <tool> <p>       delete a saved profile
   charon completion <shell>  print a bash/zsh/fish completion script
-  charon update              upgrade charon to the latest version
+  charon update              upgrade from this fork's GitHub releases
+                             (override URL with CHARON_UPDATE_URL)
   charon uninstall           remove the installed charon binary
 
 Tools: codex, claude, opencode, pi

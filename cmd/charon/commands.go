@@ -501,14 +501,36 @@ func cmdUninstall() error {
 	return nil
 }
 
-// cmdUpdate runs the online install.sh script to upgrade the binary.
+// defaultUpdateInstallURL is this fork's release install script. Upstream
+// mingtheanlay/charon is intentionally not used so `charon update` matches the
+// binary built from this repository's releases.
+const defaultUpdateInstallURL = "https://github.com/devwork2454/charon/releases/latest/download/install.sh"
+
+// updateInstallURL returns the install.sh URL used by `charon update`.
+// Override with CHARON_UPDATE_URL for mirrors or local testing.
+func updateInstallURL() string {
+	if u := strings.TrimSpace(os.Getenv("CHARON_UPDATE_URL")); u != "" {
+		return u
+	}
+	return defaultUpdateInstallURL
+}
+
+// cmdUpdate runs the online install.sh script to upgrade the binary from this
+// fork's GitHub releases (or CHARON_UPDATE_URL when set).
 func cmdUpdate() error {
-	fmt.Println("Checking for updates and upgrading charon ...")
-	cmd := exec.Command("sh", "-c", "curl -fsSL https://github.com/mingtheanlay/charon/releases/latest/download/install.sh | sh")
+	url := updateInstallURL()
+	fmt.Printf("Checking for updates and upgrading charon from\n  %s\n", url)
+	// #nosec G204 -- URL is either our constant or an explicit operator override.
+	cmd := exec.Command("sh", "-c", "curl -fsSL "+shellQuote(url)+" | sh")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("update failed: %w", err)
 	}
 	return nil
+}
+
+// shellQuote wraps s in single quotes for a POSIX shell, escaping embedded quotes.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
 }
