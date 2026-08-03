@@ -78,3 +78,28 @@ func TestSubMapCreatesAndReuses(t *testing.T) {
 		t.Error("subMap did not reuse existing map")
 	}
 }
+
+func TestLoadJSONMapWithComments(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "opencode.jsonc")
+	raw := `{
+  "theme": "dark",
+  // manual note
+  "model": "charon/mid",
+  "provider": {
+    "charon": {
+      "options": {"baseURL": "https://a.example/v1", "apiKey": "sk-a"}
+    }
+  }
+}
+`
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m, err := loadJSONMap(path)
+	if err != nil {
+		t.Fatalf("loadJSONMap with comments: %v", err)
+	}
+	if m["theme"] != "dark" || m["model"] != "charon/mid" {
+		t.Errorf("got %#v", m)
+	}
+}

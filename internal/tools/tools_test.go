@@ -700,3 +700,81 @@ func TestPiDescribeAndApply(t *testing.T) {
 		t.Errorf("Describe effort = %q, want %q", info.Effort, "high")
 	}
 }
+
+// TestOpenCodeApplyAuthWithJSONCComments ensures live opencode.jsonc with // comments
+// still receives ApplyAuth overwrites (regression: pure json.Unmarshal failed silently
+// or aborted, leaving manual config in place while only the profile store updated).
+func TestOpenCodeApplyAuthWithJSONCComments(t *testing.T) {
+	home := sandboxHome(t)
+	jsoncPath := filepath.Join(home, ".config", "opencode", "opencode.jsonc")
+	writeFile(t, jsoncPath, `{
+  "$schema": "https://opencode.ai/config.json",
+  "theme": "manual-theme",
+  "model": "charon/old",
+  "provider": {
+    "charon": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "charon",
+      "options": {"baseURL": "https://old.example/v1", "apiKey": "sk-old"},
+      "models": {"old": {"name": "old"}}
+    }
+  },
+  "agent": {
+    "compaction": {
+      // OpenCode comment that breaks encoding/json
+      "model": "charon/low"
+    }
+  }
+}`)
+
+	c := Find("opencode")
+	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://new.example/v1", Key: "sk-new", Model: "fresh"}); err != nil {
+		t.Fatalf("ApplyAuth with JSONC comments: %v", err)
+	}
+
+	var cfg struct {
+		Theme    string `json:"theme"`
+		Model    string `json:"model"`
+		Provider map[string]struct {
+			Options struct {
+				BaseURL string `json:"baseURL"`
+				APIKey  string `json:"apiKey"`
+			} `json:"options"`
+			Models map[string]any `json:"models"`
+		} `json:"provider"`
+	}
+	data, err := os.ReadFile(jsoncPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("live file should be pure JSON after ApplyAuth: %v\n%s", err, data)
+	}
+	if cfg.Model != "charon/fresh" {
+		t.Errorf("model = %q, want charon/fresh", cfg.Model)
+	}
+	p, ok := cfg.Provider["charon"]
+	if !ok {
+		t.Fatal("charon provider missing")
+	}
+	if p.Options.BaseURL != "https://new.example/v1" || p.Options.APIKey != "sk-new" {
+		t.Errorf("provider options not overwritten: %#v", p.Options)
+	}
+	if _, ok := p.Models["fresh"]; !ok {
+		t.Errorf("fresh model not registered: %#v", p.Models)
+	}
+	// Non-owned preference keys are not ApplyAuth's job; theme may be lost on rewrite
+	// of the whole map via writeJSONMap (ApplyAuth loads full map then writes).
+	// theme should survive load-merge because loadJSONMap keeps all keys.
+	if cfg.Theme != "manual-theme" {
+		t.Errorf("theme = %q, want manual-theme preserved", cfg.Theme)
+	}
+
+	info, err := c.Describe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Model != "fresh" || info.Endpoint != "https://new.example/v1" {
+		t.Errorf("Describe after JSONC apply: %#v", info)
+	}
+}

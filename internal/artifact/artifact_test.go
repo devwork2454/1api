@@ -166,3 +166,39 @@ func TestAtomicWriteReplaces(t *testing.T) {
 		t.Errorf("got %q, want v2", data)
 	}
 }
+
+func TestMergedJSONFileMergeWithJSONCComments(t *testing.T) {
+	a := NewMergedJSONFile("opencode.jsonc", filepath.Join(t.TempDir(), "opencode.jsonc"), 0o600, "provider", "model")
+
+	snapshot := []byte(`{"provider":{"charon":{"options":{"baseURL":"https://snap.example"}}},"model":"charon/snap","theme":"dark"}`)
+	live := []byte(`{
+  "provider": {"charon": {"options": {"baseURL": "https://live.example"}}},
+  "model": "charon/live",
+  "theme": "light",
+  "agent": {
+    "compaction": {
+      // comment
+      "model": "charon/low"
+    }
+  }
+}`)
+
+	merged, err := a.Merge(snapshot, live)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(merged, &got); err != nil {
+		t.Fatalf("merged not pure JSON: %v", err)
+	}
+	if got["model"] != "charon/snap" {
+		t.Errorf("model = %v, want snapshot", got["model"])
+	}
+	if got["theme"] != "light" {
+		t.Errorf("theme = %v, want live non-owned", got["theme"])
+	}
+	agent, _ := got["agent"].(map[string]any)
+	if agent == nil {
+		t.Fatal("agent from live should be preserved (non-owned)")
+	}
+}

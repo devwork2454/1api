@@ -8,9 +8,12 @@ import (
 	toml "github.com/pelletier/go-toml/v2"
 
 	"charon/internal/artifact"
+	"charon/internal/jsonc"
 )
 
-// loadJSONMap reads path as a JSON object, returning an empty map if absent.
+// loadJSONMap reads path as a JSON/JSONC object, returning an empty map if absent.
+// JSONC comments (// and /* */) are accepted so OpenCode's opencode.jsonc can be
+// edited in place without failing ApplyAuth.
 func loadJSONMap(path string) (map[string]any, error) {
 	m := map[string]any{}
 	data, err := os.ReadFile(path)
@@ -23,7 +26,7 @@ func loadJSONMap(path string) (map[string]any, error) {
 	if len(data) == 0 {
 		return m, nil
 	}
-	if err := json.Unmarshal(data, &m); err != nil {
+	if err := jsonc.Unmarshal(data, &m); err != nil {
 		return nil, err
 	}
 	return m, nil

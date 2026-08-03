@@ -12,6 +12,7 @@ import (
 
 	toml "github.com/pelletier/go-toml/v2"
 
+	"charon/internal/jsonc"
 	"charon/internal/secret"
 )
 
@@ -137,7 +138,7 @@ func NewMergedJSONFile(id, path string, perm os.FileMode, ownedKeys ...string) *
 			if len(b) == 0 {
 				return m, nil
 			}
-			err := json.Unmarshal(b, &m)
+			err := jsonc.Unmarshal(b, &m)
 			return m, err
 		},
 		encode: func(m map[string]any) ([]byte, error) { return json.MarshalIndent(m, "", "  ") },
