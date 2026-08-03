@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"charon/internal/models"
+	"charon/internal/tools"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -31,6 +32,16 @@ func fetchModelsCmd(provider, endpoint, key string) tea.Cmd {
 		l, err := models.Fetch(models.Provider(provider), endpoint, key)
 		return fetchedMsg{list: l, err: err}
 	}
+}
+
+func modelListProvider(toolName, endpoint string) string {
+	if toolName == "opencode" {
+		return tools.ResolveWire(tools.Find(toolName), endpoint, "")
+	}
+	if t := tools.Find(toolName); t != nil {
+		return t.Provider
+	}
+	return "openai"
 }
 
 // loadingMessages are playful lines shown while fetching, one picked at random per fetch.
@@ -58,7 +69,11 @@ func (m *model) beginFetch() tea.Cmd {
 	m.pending = nil
 	m.loadingMsg = randomLoadingMsg()
 	m.spinner = newSpinner()
-	return tea.Batch(m.spinner.Tick, fetchModelsCmd(m.tool.Provider, m.wiz.endpoint, m.wiz.key))
+	prov := modelListProvider(m.tool.Name, m.wiz.endpoint)
+	if prov == "" {
+		prov = m.tool.Provider
+	}
+	return tea.Batch(m.spinner.Tick, fetchModelsCmd(prov, m.wiz.endpoint, m.wiz.key))
 }
 
 // applyFetched moves to the model picker on success, or recovers gracefully on error.

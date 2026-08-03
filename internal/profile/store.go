@@ -30,6 +30,8 @@ type Spec struct {
 	Endpoint string `json:"endpoint,omitempty"`
 	Key      string `json:"key,omitempty"`
 	Model    string `json:"model,omitempty"`
+	// Wire is openai|anthropic for dual-wire tools (OpenCode); empty = auto.
+	Wire string `json:"wire,omitempty"`
 }
 
 // Manifest records a stored profile's metadata and which artifacts it contained

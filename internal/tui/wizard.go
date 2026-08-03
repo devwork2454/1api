@@ -266,7 +266,20 @@ func (m model) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // finishAdd applies the wizard's endpoint/key/model and snapshots it as the named
 // profile — via EditProfile when editing, so a rename also cleans up the old name.
 func (m model) finishAdd(name string) (tea.Model, tea.Cmd) {
-	spec := profile.Spec{Endpoint: m.wiz.endpoint, Key: m.wiz.key, Model: m.wiz.model}
+	ep := m.wiz.endpoint
+	wire := ""
+	if m.tool != nil && m.tool.Name == "opencode" {
+		wire = tools.ResolveWire(m.tool, ep, "")
+		if wire == tools.WireAnthropic {
+			ep = tools.NormalizeAnthropicBaseURL(ep)
+		}
+		// Persist explicit wire only when auto-detect chose anthropic so re-edit
+		// keeps @ai-sdk/anthropic even if the URL is a generic gateway host.
+		if wire == tools.WireOpenAI {
+			wire = ""
+		}
+	}
+	spec := profile.Spec{Endpoint: ep, Key: m.wiz.key, Model: m.wiz.model, Wire: wire}
 	verb := "Added"
 	var err error
 	if m.wiz.edit {

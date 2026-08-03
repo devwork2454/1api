@@ -23,7 +23,7 @@ func TestDiscoverModelsOK(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	tool := tools.Find("opencode")
-	got := discoverModels(tool, srv.URL, "sk-test")
+	got := discoverModels(tool, srv.URL, "sk-test", "")
 	if len(got) != 2 || got[0] != "m1" || got[1] != "m2" {
 		t.Fatalf("got %v", got)
 	}
@@ -42,7 +42,7 @@ func TestDiscoverModelsFailureIsSoft(t *testing.T) {
 	}
 	old := os.Stderr
 	os.Stderr = w
-	got := discoverModels(tools.Find("codex"), srv.URL, "sk-bad")
+	got := discoverModels(tools.Find("codex"), srv.URL, "sk-bad", "")
 	_ = w.Close()
 	os.Stderr = old
 	buf := make([]byte, 512)
@@ -86,7 +86,7 @@ func TestAddProfileCLISeedsOpenCodeModels(t *testing.T) {
 	}
 
 	// Simulate cmdAdd's discover + AddProfile path.
-	all := discoverModels(tool, srv.URL+"/v1", "sk-cli")
+	all := discoverModels(tool, srv.URL+"/v1", "sk-cli", "")
 	if len(all) != 3 {
 		t.Fatalf("discover got %v", all)
 	}

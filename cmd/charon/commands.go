@@ -298,8 +298,16 @@ func cmdPrune(store *profile.Store, args []string) error {
 	return nil
 }
 
-func discoverModels(t *tools.Tool, endpoint, key string) []string {
-	list, err := models.Fetch(models.Provider(t.Provider), t.ResolveEndpoint(endpoint), key)
+func listProvider(t *tools.Tool, endpoint, wire string) models.Provider {
+	if tools.ResolveWire(t, endpoint, wire) == tools.WireAnthropic {
+		return models.Anthropic
+	}
+	return models.OpenAI
+}
+
+func discoverModels(t *tools.Tool, endpoint, key, wire string) []string {
+	ep := t.ResolveEndpoint(endpoint)
+	list, err := models.Fetch(listProvider(t, ep, wire), ep, key)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: could not list models: %v\n", err)
 		return nil
@@ -307,15 +315,15 @@ func discoverModels(t *tools.Tool, endpoint, key string) []string {
 	return list
 }
 
-func noteWireHint(t *tools.Tool, endpoint string) {
-	if hint := tools.WireHint(t, endpoint); hint != "" {
+func noteWireHint(t *tools.Tool, endpoint, wire string) {
+	if hint := tools.WireHintFor(t, endpoint, wire); hint != "" {
 		fmt.Fprintln(os.Stderr, "note: "+hint)
 	}
 }
 
 func cmdModels(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: charon models <tool> --key <key> [--endpoint <url>]")
+		return fmt.Errorf("usage: charon models <tool> --key <key> [--endpoint <url>] [--wire openai|anthropic]")
 	}
 	t, err := requireTool(args[0])
 	if err != nil {
@@ -324,6 +332,7 @@ func cmdModels(args []string) error {
 	fs := flag.NewFlagSet("models", flag.ContinueOnError)
 	endpoint := fs.String("endpoint", "", "API base URL")
 	key := fs.String("key", "", "API key")
+	wireFlag := fs.String("wire", "", "protocol: openai, anthropic, or auto (OpenCode)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -333,9 +342,13 @@ func cmdModels(args []string) error {
 	if err := tools.ValidateEndpoint(*endpoint); err != nil {
 		return err
 	}
+	wire, err := tools.NormalizeWire(*wireFlag)
+	if err != nil {
+		return err
+	}
 	ep := t.ResolveEndpoint(*endpoint)
-	noteWireHint(t, ep)
-	list, err := models.Fetch(models.Provider(t.Provider), ep, *key)
+	noteWireHint(t, ep, wire)
+	list, err := models.Fetch(listProvider(t, ep, wire), ep, *key)
 	if err != nil {
 		return err
 	}
@@ -347,7 +360,7 @@ func cmdModels(args []string) error {
 
 func cmdAdd(store *profile.Store, args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: charon add <tool> --name <p> --key <k> [--endpoint <url>] [--model <m>]")
+		return fmt.Errorf("usage: charon add <tool> --name <p> --key <k> [--endpoint <url>] [--model <m>] [--wire openai|anthropic]")
 	}
 	t, err := requireTool(args[0])
 	if err != nil {
@@ -358,6 +371,7 @@ func cmdAdd(store *profile.Store, args []string) error {
 	key := fs.String("key", "", "API key")
 	model := fs.String("model", "", "model id")
 	name := fs.String("name", "", "profile name")
+	wireFlag := fs.String("wire", "", "protocol: openai, anthropic, or auto (OpenCode)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -373,21 +387,27 @@ func cmdAdd(store *profile.Store, args []string) error {
 	if err := tools.ValidateEndpoint(*endpoint); err != nil {
 		return err
 	}
-	ep := t.ResolveEndpoint(*endpoint)
-	noteWireHint(t, ep)
-	// Match the TUI wizard: seed OpenCode/Pi model pickers with the full list when
-	// the endpoint answers GET /v1/models. Failure is non-fatal (warn only).
-	allModels := discoverModels(t, ep, *key)
-	if err := store.AddProfile(t, *name, profile.Spec{Endpoint: ep, Key: *key, Model: *model}, allModels...); err != nil {
+	wire, err := tools.NormalizeWire(*wireFlag)
+	if err != nil {
 		return err
 	}
-	fmt.Printf("Added and activated %s profile %q (%s · %s)\n", t.Title, *name, ep, *model)
+	ep := t.ResolveEndpoint(*endpoint)
+	if t.Name == "opencode" && tools.ResolveWire(t, ep, wire) == tools.WireAnthropic {
+		ep = tools.NormalizeAnthropicBaseURL(ep)
+	}
+	noteWireHint(t, ep, wire)
+	allModels := discoverModels(t, ep, *key, wire)
+	if err := store.AddProfile(t, *name, profile.Spec{Endpoint: ep, Key: *key, Model: *model, Wire: wire}, allModels...); err != nil {
+		return err
+	}
+	resolved := tools.ResolveWire(t, ep, wire)
+	fmt.Printf("Added and activated %s profile %q (%s · %s · wire=%s)\n", t.Title, *name, ep, *model, resolved)
 	return nil
 }
 
 func cmdEdit(store *profile.Store, args []string) error {
 	if len(args) < 2 {
-		return fmt.Errorf("usage: charon edit <tool> <profile> [--endpoint --key --model --name]")
+		return fmt.Errorf("usage: charon edit <tool> <profile> [--endpoint --key --model --name --wire]")
 	}
 	t, err := requireTool(args[0])
 	if err != nil {
@@ -398,12 +418,12 @@ func cmdEdit(store *profile.Store, args []string) error {
 	if !ok {
 		return fmt.Errorf("profile %q has no editable endpoint/key (captured or default profile)", name)
 	}
-	// Flags default to the current values, so an unset flag leaves that field unchanged.
 	fs := flag.NewFlagSet("edit", flag.ContinueOnError)
 	endpoint := fs.String("endpoint", sp.Endpoint, "API base URL")
 	key := fs.String("key", sp.Key, "API key")
 	model := fs.String("model", sp.Model, "model id")
 	newName := fs.String("name", "", "rename the profile")
+	wireFlag := fs.String("wire", sp.Wire, "protocol: openai, anthropic, or auto (OpenCode)")
 	if err := fs.Parse(args[2:]); err != nil {
 		return err
 	}
@@ -417,13 +437,21 @@ func cmdEdit(store *profile.Store, args []string) error {
 	if err := tools.ValidateEndpoint(*endpoint); err != nil {
 		return err
 	}
-	ep := t.ResolveEndpoint(*endpoint)
-	noteWireHint(t, ep)
-	allModels := discoverModels(t, ep, *key)
-	if err := store.EditProfile(t, name, target, profile.Spec{Endpoint: ep, Key: *key, Model: *model}, allModels...); err != nil {
+	wire, err := tools.NormalizeWire(*wireFlag)
+	if err != nil {
 		return err
 	}
-	fmt.Printf("Updated %s profile %q (%s · %s)\n", t.Title, target, ep, *model)
+	ep := t.ResolveEndpoint(*endpoint)
+	if t.Name == "opencode" && tools.ResolveWire(t, ep, wire) == tools.WireAnthropic {
+		ep = tools.NormalizeAnthropicBaseURL(ep)
+	}
+	noteWireHint(t, ep, wire)
+	allModels := discoverModels(t, ep, *key, wire)
+	if err := store.EditProfile(t, name, target, profile.Spec{Endpoint: ep, Key: *key, Model: *model, Wire: wire}, allModels...); err != nil {
+		return err
+	}
+	resolved := tools.ResolveWire(t, ep, wire)
+	fmt.Printf("Updated %s profile %q (%s · %s · wire=%s)\n", t.Title, target, ep, *model, resolved)
 	return nil
 }
 
