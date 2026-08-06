@@ -95,14 +95,35 @@ func Fetch(provider Provider, endpoint, key string) ([]string, error) {
 	}
 
 	ids := make([]string, 0, len(out.Data))
+	seen := map[string]struct{}{}
 	for _, m := range out.Data {
-		if m.ID != "" {
-			ids = append(ids, m.ID)
+		id := normalizeModelID(m.ID)
+		if id == "" {
+			continue
 		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
 	}
 	if len(ids) == 0 {
 		return nil, fmt.Errorf("no models returned by %s", endpoint)
 	}
 	sort.Strings(ids)
 	return ids, nil
+}
+
+// normalizeModelID cleans provider-specific model id quirks.
+// Google's OpenAI-compatible /models list returns "models/gemini-…" while
+// chat/completions and OpenCode's google provider use bare "gemini-…".
+func normalizeModelID(id string) string {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return ""
+	}
+	if strings.HasPrefix(id, "models/") {
+		return strings.TrimPrefix(id, "models/")
+	}
+	return id
 }

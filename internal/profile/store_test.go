@@ -1364,3 +1364,94 @@ func TestOpenCodeSwitchRestoresTieredAgents(t *testing.T) {
 		t.Errorf("provider options = %#v", opts)
 	}
 }
+
+// TestOpenCodeSwitchSyncsOMO verifies AfterLiveChange rewrites OMO models after
+// a profile switch restores OpenCode tiers.
+func TestOpenCodeSwitchSyncsOMO(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USER", "tester")
+
+	livePath := filepath.Join(home, ".config", "opencode", "opencode.jsonc")
+	if err := os.MkdirAll(filepath.Dir(livePath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(livePath, []byte(`{"$schema":"https://opencode.ai/config.json"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	omoPath := filepath.Join(home, ".omo", "omo.jsonc")
+	if err := os.MkdirAll(filepath.Dir(omoPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(omoPath, []byte(`{
+  "[opencode]": {
+    "agents": {"sisyphus": {"model": "stale", "skills": ["x"]}, "explore": {"model": "stale"}},
+    "categories": {"deep": {"model": "stale"}}
+  }
+}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	tool := tools.Find("opencode")
+	s := newStore(t)
+	if err := s.EnsureDefault(tool); err != nil {
+		t.Fatal(err)
+	}
+	if err := tool.ApplyAuth(tools.AuthSpec{
+		Endpoint:  "https://tier.example/v1",
+		Key:       "sk-tier",
+		Model:     "mid",
+		AllModels: []string{"low", "mid", "high"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveWithSpec(tool, "tiered", Spec{
+		Endpoint: "https://tier.example/v1",
+		Key:      "sk-tier",
+		Model:    "mid",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetActiveName(tool.Name, DefaultName); err != nil {
+		t.Fatal(err)
+	}
+
+	// Drift OMO away, then switch back to tiered — AfterLiveChange should repair it.
+	if err := os.WriteFile(omoPath, []byte(`{
+  "[opencode]": {
+    "agents": {"sisyphus": {"model": "drifted", "skills": ["x"]}, "explore": {"model": "drifted"}},
+    "categories": {"deep": {"model": "drifted"}}
+  }
+}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.Apply(tool, "tiered"); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	data, err := os.ReadFile(omoPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("parse omo: %v\n%s", err, data)
+	}
+	sec := cfg["[opencode]"].(map[string]any)
+	agents := sec["agents"].(map[string]any)
+	if agents["sisyphus"].(map[string]any)["model"] != "charon/high" {
+		t.Errorf("sisyphus = %#v", agents["sisyphus"])
+	}
+	if agents["explore"].(map[string]any)["model"] != "charon/low" {
+		t.Errorf("explore = %#v", agents["explore"])
+	}
+	skills, _ := agents["sisyphus"].(map[string]any)["skills"].([]any)
+	if len(skills) != 1 || skills[0] != "x" {
+		t.Errorf("skills not preserved: %#v", agents["sisyphus"])
+	}
+	cats := sec["categories"].(map[string]any)
+	if cats["deep"].(map[string]any)["model"] != "charon/high" {
+		t.Errorf("deep = %#v", cats["deep"])
+	}
+}

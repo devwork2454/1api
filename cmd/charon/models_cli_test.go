@@ -56,6 +56,74 @@ func TestDiscoverModelsFailureIsSoft(t *testing.T) {
 	}
 }
 
+func TestResolveAPIKey(t *testing.T) {
+	t.Setenv("GEMINI_API_KEY", "from-env")
+	got, err := resolveAPIKey("explicit", "GEMINI_API_KEY")
+	if err != nil || got != "explicit" {
+		t.Fatalf("explicit key: got %q err=%v", got, err)
+	}
+	got, err = resolveAPIKey("", "GEMINI_API_KEY")
+	if err != nil || got != "from-env" {
+		t.Fatalf("key-env: got %q err=%v", got, err)
+	}
+	if _, err := resolveAPIKey("", ""); err == nil {
+		t.Fatal("expected error when both empty")
+	}
+	if _, err := resolveAPIKey("", "MISSING_CHARON_KEY"); err == nil {
+		t.Fatal("expected error for unset env")
+	}
+}
+
+func TestAddProfileCLIWithKeyEnv(t *testing.T) {
+	home := sandbox(t)
+	t.Setenv("GEMINI_API_KEY", "sk-from-env")
+
+	cfgPath := filepath.Join(home, ".config", "opencode", "opencode.jsonc")
+	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cfgPath, []byte(`{"$schema":"https://opencode.ai/config.json"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	authPath := filepath.Join(home, ".local", "share", "opencode", "auth.json")
+	if err := os.MkdirAll(filepath.Dir(authPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(authPath, []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"id":"models/gemini-2.5-flash"},{"id":"gemini-2.5-pro"}]}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	if err := run([]string{
+		"add", "opencode",
+		"--name", "gemini",
+		"--key-env", "GEMINI_API_KEY",
+		"--endpoint", srv.URL + "/v1beta/openai",
+		"--model", "gemini-2.5-flash",
+	}); err != nil {
+		t.Fatalf("add with --key-env: %v", err)
+	}
+
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(data)
+	if !strings.Contains(body, "sk-from-env") {
+		t.Errorf("config missing key from env:\n%s", body)
+	}
+	if strings.Contains(body, `"models/gemini-2.5-flash"`) {
+		t.Errorf("models/ prefix should be stripped:\n%s", body)
+	}
+	if !strings.Contains(body, "gemini-2.5-flash") {
+		t.Errorf("expected gemini-2.5-flash in config:\n%s", body)
+	}
+}
+
 func TestAddProfileCLISeedsOpenCodeModels(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

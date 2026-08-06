@@ -92,10 +92,12 @@ func agentTierClass(name string) opencodeTier {
 	switch {
 	case n == "":
 		return tierMid
-	case containsAny(n, "compaction", "explore", "librarian", "title", "summary", "small", "quick", "fast"):
+	case containsAny(n, "compaction", "explore", "librarian", "title", "summary", "small", "quick", "fast",
+		"writing", "unspecified-low") || strings.HasSuffix(n, "-low"):
 		return tierLow
 	case containsAny(n, "plan", "oracle", "architect", "review", "research", "deep", "ultrabrain",
-		"prometheus", "momus", "metis", "sisyphus", "critique", "security"):
+		"prometheus", "momus", "metis", "sisyphus", "critique", "security", "artistry",
+		"unspecified-high") || strings.HasSuffix(n, "-high"):
 		return tierHigh
 	default:
 		return tierMid

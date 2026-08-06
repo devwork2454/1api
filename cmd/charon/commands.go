@@ -321,9 +321,26 @@ func noteWireHint(t *tools.Tool, endpoint, wire string) {
 	}
 }
 
+// resolveAPIKey prefers an explicit --key; otherwise reads --key-env (e.g. GEMINI_API_KEY).
+func resolveAPIKey(key, keyEnv string) (string, error) {
+	key = strings.TrimSpace(key)
+	if key != "" {
+		return key, nil
+	}
+	envName := strings.TrimSpace(keyEnv)
+	if envName == "" {
+		return "", fmt.Errorf("--key or --key-env is required")
+	}
+	val := strings.TrimSpace(os.Getenv(envName))
+	if val == "" {
+		return "", fmt.Errorf("environment variable %s is empty or unset", envName)
+	}
+	return val, nil
+}
+
 func cmdModels(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: charon models <tool> --key <key> [--endpoint <url>] [--wire openai|anthropic]")
+		return fmt.Errorf("usage: charon models <tool> (--key <k>|--key-env <NAME>) [--endpoint <url>] [--wire openai|anthropic]")
 	}
 	t, err := requireTool(args[0])
 	if err != nil {
@@ -332,10 +349,16 @@ func cmdModels(args []string) error {
 	fs := flag.NewFlagSet("models", flag.ContinueOnError)
 	endpoint := fs.String("endpoint", "", "API base URL")
 	key := fs.String("key", "", "API key")
+	keyEnv := fs.String("key-env", "", "read API key from this environment variable (e.g. GEMINI_API_KEY)")
 	wireFlag := fs.String("wire", "", "protocol: openai, anthropic, or auto (OpenCode)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
+	resolvedKey, err := resolveAPIKey(*key, *keyEnv)
+	if err != nil {
+		return err
+	}
+	*key = resolvedKey
 	if err := tools.ValidateKey(*key); err != nil {
 		return err
 	}
@@ -360,7 +383,7 @@ func cmdModels(args []string) error {
 
 func cmdAdd(store *profile.Store, args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: charon add <tool> --name <p> --key <k> [--endpoint <url>] [--model <m>] [--wire openai|anthropic]")
+		return fmt.Errorf("usage: charon add <tool> --name <p> (--key <k>|--key-env <NAME>) [--endpoint <url>] [--model <m>] [--wire openai|anthropic]")
 	}
 	t, err := requireTool(args[0])
 	if err != nil {
@@ -369,6 +392,7 @@ func cmdAdd(store *profile.Store, args []string) error {
 	fs := flag.NewFlagSet("add", flag.ContinueOnError)
 	endpoint := fs.String("endpoint", "", "API base URL")
 	key := fs.String("key", "", "API key")
+	keyEnv := fs.String("key-env", "", "read API key from this environment variable (e.g. GEMINI_API_KEY)")
 	model := fs.String("model", "", "model id")
 	name := fs.String("name", "", "profile name")
 	wireFlag := fs.String("wire", "", "protocol: openai, anthropic, or auto (OpenCode)")
@@ -381,6 +405,11 @@ func cmdAdd(store *profile.Store, args []string) error {
 	if *name == "" {
 		return fmt.Errorf("--name is required")
 	}
+	resolvedKey, err := resolveAPIKey(*key, *keyEnv)
+	if err != nil {
+		return err
+	}
+	*key = resolvedKey
 	if err := tools.ValidateKey(*key); err != nil {
 		return err
 	}
@@ -421,6 +450,7 @@ func cmdEdit(store *profile.Store, args []string) error {
 	fs := flag.NewFlagSet("edit", flag.ContinueOnError)
 	endpoint := fs.String("endpoint", sp.Endpoint, "API base URL")
 	key := fs.String("key", sp.Key, "API key")
+	keyEnv := fs.String("key-env", "", "read API key from this environment variable (e.g. GEMINI_API_KEY)")
 	model := fs.String("model", sp.Model, "model id")
 	newName := fs.String("name", "", "rename the profile")
 	wireFlag := fs.String("wire", sp.Wire, "protocol: openai, anthropic, or auto (OpenCode)")
@@ -430,6 +460,13 @@ func cmdEdit(store *profile.Store, args []string) error {
 	target := name
 	if *newName != "" {
 		target = *newName
+	}
+	if strings.TrimSpace(*keyEnv) != "" {
+		resolvedKey, err := resolveAPIKey("", *keyEnv)
+		if err != nil {
+			return err
+		}
+		*key = resolvedKey
 	}
 	if err := tools.ValidateKey(*key); err != nil {
 		return err

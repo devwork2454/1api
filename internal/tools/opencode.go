@@ -44,6 +44,8 @@ func newOpenCode() *Tool {
 				WithAgentFallback("agent", "agents"),
 			artifact.NewRotatingFile("auth.json", authPath, 0o600), // OAuth logins (e.g. github-copilot); OpenCode refreshes them in place
 		},
+		// Keep oh-my-openagent in sync after profile switch/undo (ApplyAuth syncs on add/edit).
+		AfterLiveChange: SyncOMOFromOpenCodeLive,
 		ApplyAuth: func(a AuthSpec) error {
 			// Register a "charon" provider: OpenCode needs options.apiKey and a
 			// non-empty models map for the models to show in /models.
@@ -86,6 +88,8 @@ func newOpenCode() *Tool {
 				"name":    "charon",
 				"options": options,
 			}
+			var tiers opencodeTierModels
+			var haveTiers bool
 			if a.Model != "" {
 				// Register every model the caller already fetched (e.g. the TUI wizard's
 				// picker list), not just a.Model, so OpenCode's own /models picker can
@@ -103,7 +107,8 @@ func newOpenCode() *Tool {
 				if !slices.Contains(ids, a.Model) {
 					ids = append(ids, a.Model)
 				}
-				tiers := resolveOpenCodeTiers(a.Model, ids)
+				tiers = resolveOpenCodeTiers(a.Model, ids)
+				haveTiers = true
 				for _, id := range []string{tiers.Mid, tiers.Low, tiers.High} {
 					if id != "" && !slices.Contains(ids, id) {
 						ids = append(ids, id)
@@ -124,7 +129,16 @@ func newOpenCode() *Tool {
 			if err := ensureOnlyCharonChanged(original, provider); err != nil {
 				return err
 			}
-			return writeJSONMap(configPath, cfg, 0o600)
+			if err := writeJSONMap(configPath, cfg, 0o600); err != nil {
+				return err
+			}
+			// Companion: oh-my-openagent agents/categories → charon/<tier>. Skip if not installed.
+			if haveTiers {
+				if err := syncOMOTiers(tiers); err != nil {
+					return err
+				}
+			}
+			return nil
 		},
 		Detected: func() bool {
 			return detected("opencode", configPath, authPath)

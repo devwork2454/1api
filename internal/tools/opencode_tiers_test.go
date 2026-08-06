@@ -33,11 +33,13 @@ func TestAgentTierClass(t *testing.T) {
 		"compaction": tierLow,
 		"explore":    tierLow,
 		"librarian":  tierLow,
+		"writing":    tierLow,
 		"build":      tierMid,
 		"atlas":      tierMid,
 		"oracle":     tierHigh,
 		"prometheus": tierHigh,
 		"sisyphus":   tierHigh,
+		"artistry":   tierHigh,
 		"":           tierMid,
 	}
 	for name, want := range cases {

@@ -11,6 +11,9 @@ CLIs and switches each one's **endpoint + credentials** between named profiles.
 Keychain. It also
 **reads** `~/.claude.json` (`oauthAccount.emailAddress`) solely to name an
 account-backup profile — that file is never written or snapshotted.
+When configuring OpenCode, charon may also rewrite **only** `model` fields under
+`~/.omo/omo.jsonc` (oh-my-openagent agents/categories) to `charon/<tier>`; if
+that file is absent, OMO sync is skipped (not an error, not created).
 
 - **Never** run `charon add`, `charon switch`, `charon save`, or the interactive menu
   against your real `$HOME` while developing. Always sandbox:

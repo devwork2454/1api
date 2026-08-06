@@ -59,6 +59,52 @@ func TestFetchOpenAI(t *testing.T) {
 	}
 }
 
+func TestNormalizeModelID(t *testing.T) {
+	tests := []struct {
+		in, want string
+	}{
+		{"", ""},
+		{"  gemini-2.5-flash  ", "gemini-2.5-flash"},
+		{"models/gemini-2.5-flash", "gemini-2.5-flash"},
+		{"models/", ""},
+		{"gpt-4o", "gpt-4o"},
+	}
+	for _, tt := range tests {
+		if got := normalizeModelID(tt.in); got != tt.want {
+			t.Errorf("normalizeModelID(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestFetchStripsGoogleModelsPrefix(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1beta/openai/models" && r.URL.Path != "/v1/models" {
+			// Google OpenAI-compat endpoint ends with /openai (no trailing /v1)
+			if !strings.HasSuffix(r.URL.Path, "/models") {
+				http.NotFound(w, r)
+				return
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]string{
+				{"id": "models/gemini-2.5-flash"},
+				{"id": "gemini-2.5-flash"},
+				{"id": "models/gemini-2.5-pro"},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	got, err := Fetch(OpenAI, srv.URL+"/v1beta/openai", "sk-test")
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	want := []string{"gemini-2.5-flash", "gemini-2.5-pro"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
 func TestFetchAnthropic(t *testing.T) {
 	srv := httptest.NewServer(modelsHandler(t, "x-api-key", "sk-ant"))
 	defer srv.Close()

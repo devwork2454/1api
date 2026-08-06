@@ -64,6 +64,12 @@ func (s *Store) switchTo(t *tools.Tool, sourceDir, backupLabel, resultingActive 
 		// snapshot. This way, in-session changes don't require an explicit `refresh`.
 		s.refreshMergerArtifacts(t)
 	}
+	// Companion configs (e.g. oh-my-openagent) that aren't snapshotted as Artifacts.
+	if t.AfterLiveChange != nil {
+		if err := t.AfterLiveChange(); err != nil {
+			return backupDir, err
+		}
+	}
 	if perr := s.pruneBackups(t.Name, backupKeep); perr != nil {
 		s.warn("switchTo: pruneBackups", perr)
 	}
