@@ -9,22 +9,24 @@ import (
 	"sort"
 	"strings"
 
-	"charon/internal/artifact"
+	"1api/internal/artifact"
 )
 
 // Pi has no static provider-config file: providers are registered by TypeScript
 // extensions (pi.registerProvider(...)) auto-loaded from ~/.pi/agent/extensions.
-// charon owns one such extension, charon.ts, wrapping a JSON blob so it can be
+// 1api owns one such extension, 1api.ts, wrapping a JSON blob so it can be
 // round-tripped without a TS parser; see piExtensionOpen/Close markers below.
 const (
-	piExtensionOpen  = `pi.registerProvider("charon", `
+	piExtensionOpen  = `pi.registerProvider("1api", `
 	piExtensionClose = `);
-  // charon:config:end
+  // 1api:config:end
 }
 `
 )
 
-var piConfigRE = regexp.MustCompile(`(?s)pi\.registerProvider\("charon",\s*(.*?)\);\s*\n\s*// charon:config:end`)
+// piConfigRE matches both the current "1api" provider name and the legacy
+// pre-rename "charon" name, so a config written by an older version is still read.
+var piConfigRE = regexp.MustCompile(`(?s)pi\.registerProvider\("(?:1api|charon)",\s*(.*?)\);\s*\n\s*// (?:1api|charon):config:end`)
 
 // piModel is one entry of a pi provider's "models" array.
 type piModel struct {
@@ -89,7 +91,7 @@ func piBuildModels(ids []string) []piModel {
 	return models
 }
 
-// piExtensionContent renders charon's extension .ts file for cfg.
+// piExtensionContent renders 1api's extension .ts file for cfg.
 func piExtensionContent(cfg piProviderConfig) ([]byte, error) {
 	body, err := json.MarshalIndent(cfg, "  ", "  ")
 	if err != nil {
@@ -99,7 +101,7 @@ func piExtensionContent(cfg piProviderConfig) ([]byte, error) {
 	b.WriteString(`import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export default function (pi: ExtensionAPI) {
-  // charon:config
+  // 1api:config
   `)
 	b.WriteString(piExtensionOpen)
 	b.Write(body)
@@ -108,7 +110,7 @@ export default function (pi: ExtensionAPI) {
 }
 
 // piParseExtension extracts the provider config JSON from a previously written
-// charon.ts, "" fields / nil models if the file is absent or unrecognized.
+// 1api.ts, "" fields / nil models if the file is absent or unrecognized.
 func piParseExtension(data []byte) (piProviderConfig, bool) {
 	m := piConfigRE.FindSubmatch(data)
 	if m == nil {
@@ -121,15 +123,28 @@ func piParseExtension(data []byte) (piProviderConfig, bool) {
 	return cfg, true
 }
 
+// piReadExtension loads the pi extension, trying the current on-disk name first
+// and falling back to the legacy pre-rename name so old installs keep working
+// until the next switch rewrites 1api.ts.
+func piReadExtension(extensionPath, legacyExtensionPath string) ([]byte, error) {
+	if data, err := os.ReadFile(extensionPath); err == nil {
+		return data, nil
+	}
+	return os.ReadFile(legacyExtensionPath)
+}
+
 // newPi describes the pi coding agent: providers are registered via a TypeScript
-// extension (~/.pi/agent/extensions/charon.ts); model/effort defaults live in
-// ~/.pi/agent/settings.json; OAuth-based provider logins (unrelated to charon's
+// extension (~/.pi/agent/extensions/1api.ts); model/effort defaults live in
+// ~/.pi/agent/settings.json; OAuth-based provider logins (unrelated to 1api's
 // key-based provider) persist in ~/.pi/agent/auth.json.
 func newPi() *Tool {
 	dir := filepath.Join(home(), ".pi", "agent")
 	settingsPath := filepath.Join(dir, "settings.json")
 	authPath := filepath.Join(dir, "auth.json")
-	extensionPath := filepath.Join(dir, "extensions", "charon.ts")
+	extensionPath := filepath.Join(dir, "extensions", "1api.ts")
+	// legacyExtensionPath is the pre-rename on-disk name; old installs still carry
+	// charon.ts, so reads fall back to it until the next switch rewrites 1api.ts.
+	legacyExtensionPath := filepath.Join(dir, "extensions", "charon.ts")
 
 	return &Tool{
 		Name:            "pi",
@@ -143,7 +158,7 @@ func newPi() *Tool {
 			artifact.NewMergedJSONFile("settings.json", settingsPath, 0o600,
 				"defaultProvider", "defaultModel", "defaultThinkingLevel").
 				WithDisplay("defaultModel", "defaultThinkingLevel"),
-			artifact.NewFile("charon.ts", extensionPath, 0o600),    // charon owns this extension file outright
+			artifact.NewFile("1api.ts", extensionPath, 0o600),      // 1api owns this extension file outright
 			artifact.NewRotatingFile("auth.json", authPath, 0o600), // OAuth provider logins; pi refreshes them in place
 		},
 		ApplyAuth: func(a AuthSpec) error {
@@ -151,7 +166,7 @@ func newPi() *Tool {
 			// its own (rename, key rotation, CLI --model) — otherwise pi's /model picker
 			// would collapse down to just the single current model.
 			var existingModels []string
-			if data, err := os.ReadFile(extensionPath); err == nil {
+			if data, err := piReadExtension(extensionPath, legacyExtensionPath); err == nil {
 				if prev, ok := piParseExtension(data); ok {
 					for _, m := range prev.Models {
 						existingModels = append(existingModels, m.ID)
@@ -167,7 +182,7 @@ func newPi() *Tool {
 			}
 
 			cfg := piProviderConfig{
-				Name:    "charon",
+				Name:    "1api",
 				BaseURL: a.Endpoint,
 				APIKey:  piEscapeValue(a.Key),
 				API:     "openai-completions",
@@ -188,7 +203,7 @@ func newPi() *Tool {
 			if err != nil {
 				return err
 			}
-			s["defaultProvider"] = "charon"
+			s["defaultProvider"] = "1api"
 			if a.Model != "" {
 				s["defaultModel"] = a.Model
 			}
@@ -210,8 +225,8 @@ func newPi() *Tool {
 					info.Model = s.DefaultModel
 					info.Effort = s.DefaultThinkingLevel
 
-					if s.DefaultProvider == "charon" || s.DefaultProvider == "" {
-						if data, err := os.ReadFile(extensionPath); err == nil {
+					if s.DefaultProvider == "1api" || s.DefaultProvider == "charon" || s.DefaultProvider == "" {
+						if data, err := piReadExtension(extensionPath, legacyExtensionPath); err == nil {
 							if cfg, ok := piParseExtension(data); ok {
 								info.Endpoint = cfg.BaseURL
 								if cfg.APIKey != "" {

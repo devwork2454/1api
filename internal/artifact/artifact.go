@@ -12,8 +12,8 @@ import (
 
 	toml "github.com/pelletier/go-toml/v2"
 
-	"charon/internal/jsonc"
-	"charon/internal/secret"
+	"1api/internal/jsonc"
+	"1api/internal/secret"
 )
 
 // Artifact is a single piece of a tool's auth surface that can be snapshotted
@@ -221,7 +221,7 @@ func (m *MergedFileArtifact) Peek(data []byte) (model, effort string) {
 	}
 	if m.modelKey != "" {
 		model, _ = decoded[m.modelKey].(string)
-		model = strings.TrimPrefix(model, "charon/") // OpenCode namespaces charon-registered models
+		model = strings.TrimPrefix(model, "1api/") // OpenCode namespaces 1api-registered models
 	}
 	if m.effortKey != "" {
 		effort, _ = decoded[m.effortKey].(string)
@@ -233,7 +233,7 @@ func (m *MergedFileArtifact) Peek(data []byte) (model, effort string) {
 				a, _ := v.(map[string]any)
 				if model == "" {
 					if s, _ := a["model"].(string); s != "" {
-						model = strings.TrimPrefix(s, "charon/")
+						model = strings.TrimPrefix(s, "1api/")
 					}
 				}
 				if effort == "" {
@@ -254,7 +254,7 @@ func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 		perm = 0o600
 	}
 	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, ".charon-*")
+	tmp, err := os.CreateTemp(dir, ".1api-*")
 	if err != nil {
 		return err
 	}

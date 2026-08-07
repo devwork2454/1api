@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"charon/internal/artifact"
-	"charon/internal/tools"
+	"1api/internal/artifact"
+	"1api/internal/tools"
 )
 
 // applyTool builds a tool with a single config file and an ApplyAuth that writes

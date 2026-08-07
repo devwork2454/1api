@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"charon/internal/artifact"
-	"charon/internal/secret"
+	"1api/internal/artifact"
+	"1api/internal/secret"
 )
 
 const claudeKeychainService = "Claude Code-credentials"

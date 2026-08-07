@@ -9,10 +9,10 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"charon/internal/models"
-	"charon/internal/profile"
-	"charon/internal/secret"
-	"charon/internal/tools"
+	"1api/internal/models"
+	"1api/internal/profile"
+	"1api/internal/secret"
+	"1api/internal/tools"
 )
 
 // requireTool resolves a tool-name argument, erroring with the supported names.
@@ -133,7 +133,7 @@ type profileRow struct {
 func cmdList(store *profile.Store, args []string) error {
 	toolName, rest := splitTool(args)
 	if toolName == "" {
-		return fmt.Errorf("usage: charon ls <tool> [--json]")
+		return fmt.Errorf("usage: 1api ls <tool> [--json]")
 	}
 	t, err := requireTool(toolName)
 	if err != nil {
@@ -190,7 +190,7 @@ func cmdList(store *profile.Store, args []string) error {
 
 func cmdSwitch(store *profile.Store, args []string) error {
 	if len(args) < 2 {
-		return fmt.Errorf("usage: charon switch <tool> <profile>")
+		return fmt.Errorf("usage: 1api switch <tool> <profile>")
 	}
 	t, err := requireTool(args[0])
 	if err != nil {
@@ -206,7 +206,7 @@ func cmdSwitch(store *profile.Store, args []string) error {
 
 func cmdSave(store *profile.Store, args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: charon save <tool> [name] [--label ..] [--note ..]")
+		return fmt.Errorf("usage: 1api save <tool> [name] [--label ..] [--note ..]")
 	}
 	t, err := requireTool(args[0])
 	if err != nil {
@@ -244,7 +244,7 @@ func cmdSave(store *profile.Store, args []string) error {
 
 func cmdRefresh(store *profile.Store, args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: charon refresh <tool>")
+		return fmt.Errorf("usage: 1api refresh <tool>")
 	}
 	tool, err := requireTool(args[0])
 	if err != nil {
@@ -263,7 +263,7 @@ func cmdRefresh(store *profile.Store, args []string) error {
 
 func cmdUndo(store *profile.Store, args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: charon undo <tool>")
+		return fmt.Errorf("usage: 1api undo <tool>")
 	}
 	t, err := requireTool(args[0])
 	if err != nil {
@@ -279,7 +279,7 @@ func cmdUndo(store *profile.Store, args []string) error {
 
 func cmdPrune(store *profile.Store, args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: charon prune <tool> [--keep N]")
+		return fmt.Errorf("usage: 1api prune <tool> [--keep N]")
 	}
 	t, err := requireTool(args[0])
 	if err != nil {
@@ -300,7 +300,7 @@ func cmdPrune(store *profile.Store, args []string) error {
 
 func cmdModels(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: charon models <tool> --key <key> [--endpoint <url>]")
+		return fmt.Errorf("usage: 1api models <tool> --key <key> [--endpoint <url>]")
 	}
 	t, err := requireTool(args[0])
 	if err != nil {
@@ -330,7 +330,7 @@ func cmdModels(args []string) error {
 
 func cmdAdd(store *profile.Store, args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: charon add <tool> --name <p> --key <k> [--endpoint <url>] [--model <m>]")
+		return fmt.Errorf("usage: 1api add <tool> --name <p> --key <k> [--endpoint <url>] [--model <m>]")
 	}
 	t, err := requireTool(args[0])
 	if err != nil {
@@ -366,7 +366,7 @@ func cmdAdd(store *profile.Store, args []string) error {
 
 func cmdEdit(store *profile.Store, args []string) error {
 	if len(args) < 2 {
-		return fmt.Errorf("usage: charon edit <tool> <profile> [--endpoint --key --model --name]")
+		return fmt.Errorf("usage: 1api edit <tool> <profile> [--endpoint --key --model --name]")
 	}
 	t, err := requireTool(args[0])
 	if err != nil {
@@ -405,7 +405,7 @@ func cmdEdit(store *profile.Store, args []string) error {
 
 func cmdRename(store *profile.Store, args []string) error {
 	if len(args) < 3 {
-		return fmt.Errorf("usage: charon rename <tool> <old> <new>")
+		return fmt.Errorf("usage: 1api rename <tool> <old> <new>")
 	}
 	t, err := requireTool(args[0])
 	if err != nil {
@@ -420,7 +420,7 @@ func cmdRename(store *profile.Store, args []string) error {
 
 func cmdDuplicate(store *profile.Store, args []string) error {
 	if len(args) < 3 {
-		return fmt.Errorf("usage: charon cp <tool> <src> <dst>")
+		return fmt.Errorf("usage: 1api cp <tool> <src> <dst>")
 	}
 	t, err := requireTool(args[0])
 	if err != nil {
@@ -435,7 +435,7 @@ func cmdDuplicate(store *profile.Store, args []string) error {
 
 func cmdRemove(store *profile.Store, args []string) error {
 	if len(args) < 2 {
-		return fmt.Errorf("usage: charon rm <tool> <profile>")
+		return fmt.Errorf("usage: 1api rm <tool> <profile>")
 	}
 	t, err := requireTool(args[0])
 	if err != nil {
@@ -455,7 +455,7 @@ func cmdRemove(store *profile.Store, args []string) error {
 
 func cmdCompletion(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: charon completion [bash|zsh|fish]")
+		return fmt.Errorf("usage: 1api completion [bash|zsh|fish]")
 	}
 	switch args[0] {
 	case "bash":
@@ -485,28 +485,28 @@ func cmdProfiles(store *profile.Store, args []string) error {
 	return nil
 }
 
-// cmdUninstall removes the running charon binary.
+// cmdUninstall removes the running 1api binary.
 func cmdUninstall() error {
 	exe, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("failed to locate running binary: %w", err)
 	}
-	fmt.Printf("Removing charon binary at %s ...\n", exe)
+	fmt.Printf("Removing 1api binary at %s ...\n", exe)
 	if err := os.Remove(exe); err != nil {
 		return fmt.Errorf("failed to remove binary: %w. Try running with sudo if needed", err)
 	}
-	fmt.Println("Charon binary uninstalled successfully.")
-	fmt.Println("Note: Your profile configurations at ~/.config/charon remain intact.")
-	fmt.Println("To completely remove them, run: rm -rf ~/.config/charon")
+	fmt.Println("1API binary uninstalled successfully.")
+	fmt.Println("Note: Your profile configurations at ~/.config/1api remain intact.")
+	fmt.Println("To completely remove them, run: rm -rf ~/.config/1api")
 	return nil
 }
 
 // defaultUpdateInstallURL is this fork's release install script. Upstream
-// mingtheanlay/charon is intentionally not used so `charon update` matches the
+// mingtheanlay/1api is intentionally not used so `1api update` matches the
 // binary built from this repository's releases.
-const defaultUpdateInstallURL = "https://github.com/devwork2454/charon/releases/latest/download/install.sh"
+const defaultUpdateInstallURL = "https://github.com/devwork2454/1api/releases/latest/download/install.sh"
 
-// updateInstallURL returns the install.sh URL used by `charon update`.
+// updateInstallURL returns the install.sh URL used by `1api update`.
 // Override with CHARON_UPDATE_URL for mirrors or local testing.
 func updateInstallURL() string {
 	if u := strings.TrimSpace(os.Getenv("CHARON_UPDATE_URL")); u != "" {
@@ -519,7 +519,7 @@ func updateInstallURL() string {
 // fork's GitHub releases (or CHARON_UPDATE_URL when set).
 func cmdUpdate() error {
 	url := updateInstallURL()
-	fmt.Printf("Checking for updates and upgrading charon from\n  %s\n", url)
+	fmt.Printf("Checking for updates and upgrading 1api from\n  %s\n", url)
 	// #nosec G204 -- URL is either our constant or an explicit operator override.
 	cmd := exec.Command("sh", "-c", "curl -fsSL "+shellQuote(url)+" | sh")
 	cmd.Stdout = os.Stdout

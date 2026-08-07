@@ -13,7 +13,7 @@ const (
 	tierHigh opencodeTier = "high"
 )
 
-// opencodeTierModels is the resolved mid/low/high model ids (no "charon/" prefix).
+// opencodeTierModels is the resolved mid/low/high model ids (no "1api/" prefix).
 type opencodeTierModels struct {
 	Mid  string
 	Low  string
@@ -123,14 +123,14 @@ func (t opencodeTierModels) forTier(tier opencodeTier) string {
 }
 
 // applyOpenCodeTierRouting writes model, small_model, and agent/agents model fields
-// using mid/low/high. Only rewrites agent models that are empty or already charon/*.
+// using mid/low/high. Only rewrites agent models that are empty or already 1api/*.
 // Ensures agent.compaction exists when a low model is available.
 func applyOpenCodeTierRouting(cfg map[string]any, tiers opencodeTierModels) {
 	if tiers.Mid != "" {
-		cfg["model"] = "charon/" + tiers.Mid
+		cfg["model"] = "1api/" + tiers.Mid
 	}
 	if tiers.Low != "" {
-		cfg["small_model"] = "charon/" + tiers.Low
+		cfg["small_model"] = "1api/" + tiers.Low
 	}
 
 	for _, key := range []string{"agent", "agents"} {
@@ -148,14 +148,14 @@ func applyOpenCodeTierRouting(cfg map[string]any, tiers opencodeTierModels) {
 				continue
 			}
 			cur, _ := entry["model"].(string)
-			if cur != "" && !strings.HasPrefix(cur, "charon/") {
-				continue // leave non-charon models alone
+			if cur != "" && !strings.HasPrefix(cur, "1api/") {
+				continue // leave non-1api models alone
 			}
 			id := tiers.forTier(agentTierClass(name))
 			if id == "" {
 				continue
 			}
-			entry["model"] = "charon/" + id
+			entry["model"] = "1api/" + id
 			agents[name] = entry
 		}
 		cfg[key] = agents
@@ -171,8 +171,8 @@ func applyOpenCodeTierRouting(cfg map[string]any, tiers opencodeTierModels) {
 		comp = map[string]any{}
 	}
 	cur, _ := comp["model"].(string)
-	if cur == "" || strings.HasPrefix(cur, "charon/") {
-		comp["model"] = "charon/" + tiers.Low
+	if cur == "" || strings.HasPrefix(cur, "1api/") {
+		comp["model"] = "1api/" + tiers.Low
 		agents["compaction"] = comp
 	}
 }

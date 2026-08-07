@@ -7,8 +7,8 @@ import (
 
 	toml "github.com/pelletier/go-toml/v2"
 
-	"charon/internal/artifact"
-	"charon/internal/jsonc"
+	"1api/internal/artifact"
+	"1api/internal/jsonc"
 )
 
 // loadJSONMap reads path as a JSON/JSONC object, returning an empty map if absent.

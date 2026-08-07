@@ -1,11 +1,11 @@
-// Package tools models the AI CLIs whose endpoint + credentials charon snapshots.
+// Package tools models the AI CLIs whose endpoint + credentials 1api snapshots.
 package tools
 
 import (
 	"os"
 	"os/exec"
 
-	"charon/internal/artifact"
+	"1api/internal/artifact"
 )
 
 // Info is a display-friendly summary of a tool's live configuration.

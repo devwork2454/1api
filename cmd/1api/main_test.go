@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"charon/internal/profile"
+	"1api/internal/profile"
 )
 
 // sandbox points HOME and the store's XDG_CONFIG_HOME at temp dirs so run()
@@ -110,7 +110,7 @@ func TestRunRejectsUnsafeProfileArguments(t *testing.T) {
 		}
 	}
 	// The traversal attempts must not have deleted the store or the config dir.
-	if _, err := os.Stat(filepath.Join(home, ".config", "charon")); err != nil {
+	if _, err := os.Stat(filepath.Join(home, ".config", "1api")); err != nil {
 		t.Fatalf("store dir damaged: %v", err)
 	}
 }

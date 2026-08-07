@@ -5,14 +5,14 @@ import (
 	"path/filepath"
 )
 
-// Session-supported tools for `charon run`: isolated HOME/XDG sandbox only.
+// Session-supported tools for `1api run`: isolated HOME/XDG sandbox only.
 // Claude/Pi are out of MVP (keychain / extension edge cases).
 var sessionTools = map[string]struct{}{
 	"codex":    {},
 	"opencode": {},
 }
 
-// SessionSupported reports whether tool can be launched via `charon run`.
+// SessionSupported reports whether tool can be launched via `1api run`.
 func SessionSupported(name string) bool {
 	_, ok := sessionTools[name]
 	return ok

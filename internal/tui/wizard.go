@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"charon/internal/profile"
-	"charon/internal/secret"
-	"charon/internal/tools"
+	"1api/internal/profile"
+	"1api/internal/secret"
+	"1api/internal/tools"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"

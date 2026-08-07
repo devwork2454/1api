@@ -5,14 +5,13 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
-	"strings"
 
-	"charon/internal/artifact"
-	"charon/internal/jsonc"
+	"1api/internal/artifact"
+	"1api/internal/jsonc"
 )
 
 // opencodeConfigPath returns the existing config (opencode.jsonc, else legacy
-// opencode.json) so charon edits it in place, defaulting to opencode.jsonc.
+// opencode.json) so 1api edits it in place, defaulting to opencode.jsonc.
 func opencodeConfigPath() string {
 	dir := filepath.Join(home(), ".config", "opencode")
 	for _, name := range []string{"opencode.jsonc", "opencode.json"} {
@@ -45,7 +44,7 @@ func newOpenCode() *Tool {
 			artifact.NewRotatingFile("auth.json", authPath, 0o600), // OAuth logins (e.g. github-copilot); OpenCode refreshes them in place
 		},
 		ApplyAuth: func(a AuthSpec) error {
-			// Register a "charon" provider: OpenCode needs options.apiKey and a
+			// Register a "1api" provider: OpenCode needs options.apiKey and a
 			// non-empty models map for the models to show in /models.
 			cfg, err := loadJSONMap(configPath)
 			if err != nil {
@@ -55,14 +54,14 @@ func newOpenCode() *Tool {
 				cfg["$schema"] = "https://opencode.ai/config.json"
 			}
 			provider := subMap(cfg, "provider")
-			original := snapshotProviders(provider) // guard: write may only touch "charon"
+			original := snapshotProviders(provider) // guard: write may only touch "1api"
 
 			// Preserve the previously-registered model list (e.g. from an earlier fetch)
 			// when this call doesn't bring its own — otherwise an edit that doesn't touch
 			// the model field (rename, key rotation, CLI --model) would collapse OpenCode's
 			// /models picker down to just the single current model.
 			var existingModels []string
-			if prev, ok := provider["charon"].(map[string]any); ok {
+			if prev, _ := firstManagedProvider(provider); prev != nil {
 				if models, ok := prev["models"].(map[string]any); ok {
 					for id := range models {
 						existingModels = append(existingModels, id)
@@ -76,7 +75,7 @@ func newOpenCode() *Tool {
 			}
 			entry := map[string]any{
 				"npm":     "@ai-sdk/openai-compatible",
-				"name":    "charon",
+				"name":    "1api",
 				"options": options,
 			}
 			if a.Model != "" {
@@ -86,7 +85,7 @@ func newOpenCode() *Tool {
 				// brings no fetched list (CLI --model flag, or an edit of another field)
 				// fall back to the previously-registered list so the picker doesn't
 				// collapse - but always ensure a.Model itself is registered, otherwise
-				// cfg["model"] ("charon/<a.Model>") would point at a model the provider
+				// cfg["model"] ("1api/<a.Model>") would point at a model the provider
 				// doesn't list, and opencode can't select it (it silently falls back to
 				// its own default model).
 				ids := a.AllModels
@@ -107,14 +106,14 @@ func newOpenCode() *Tool {
 					modelMap[id] = map[string]any{"name": id}
 				}
 				entry["models"] = modelMap
-				provider["charon"] = entry
+				provider["1api"] = entry
 				applyOpenCodeTierRouting(cfg, tiers)
 			} else {
-				provider["charon"] = entry
+				provider["1api"] = entry
 			}
 
 			// Fail loudly rather than risk clobbering a user-authored provider.
-			if err := ensureOnlyCharonChanged(original, provider); err != nil {
+			if err := ensureOnlyManagedChanged(original, provider); err != nil {
 				return err
 			}
 			return writeJSONMap(configPath, cfg, 0o600)
@@ -125,7 +124,7 @@ func newOpenCode() *Tool {
 		Describe: func() (Info, error) {
 			var info Info
 
-			// A charon-managed provider keeps endpoint + key in the config.
+			// A 1api-managed provider keeps endpoint + key in the config.
 			if data, err := os.ReadFile(configPath); err == nil {
 				var cfg struct {
 					Model           string `json:"model"`
@@ -147,9 +146,9 @@ func newOpenCode() *Tool {
 					} `json:"provider"`
 				}
 				if jsonc.Unmarshal(data, &cfg) == nil {
-					info.Model = strings.TrimPrefix(cfg.Model, "charon/")
+					info.Model = trimProviderPrefix(cfg.Model)
 					if info.Model == "" {
-						info.Model = strings.TrimPrefix(cfg.SmallModel, "charon/")
+						info.Model = trimProviderPrefix(cfg.SmallModel)
 					}
 					info.Effort = cfg.ReasoningEffort
 
@@ -157,7 +156,7 @@ func newOpenCode() *Tool {
 					if info.Model == "" {
 						for _, agent := range cfg.Agents {
 							if agent.Model != "" {
-								info.Model = strings.TrimPrefix(agent.Model, "charon/")
+								info.Model = trimProviderPrefix(agent.Model)
 								break
 							}
 						}
@@ -165,7 +164,7 @@ func newOpenCode() *Tool {
 					if info.Model == "" && cfg.Agent != nil {
 						for _, agent := range cfg.Agent {
 							if agent.Model != "" {
-								info.Model = strings.TrimPrefix(agent.Model, "charon/")
+								info.Model = trimProviderPrefix(agent.Model)
 								break
 							}
 						}
@@ -187,7 +186,11 @@ func newOpenCode() *Tool {
 							}
 						}
 					}
-					if p, ok := cfg.Provider["charon"]; ok {
+					p, ok := cfg.Provider[managedProvider]
+					if !ok {
+						p, ok = cfg.Provider[legacyManagedProvider]
+					}
+					if ok {
 						info.Endpoint = p.Options.BaseURL
 						if p.Options.APIKey != "" {
 							info.Secret, info.AuthMode = p.Options.APIKey, "api"

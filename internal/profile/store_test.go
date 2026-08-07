@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"charon/internal/artifact"
-	"charon/internal/tools"
+	"1api/internal/artifact"
+	"1api/internal/tools"
 )
 
 // fakeTool builds a tool whose auth surface is two files under dir, so the
@@ -566,7 +566,7 @@ func TestSwitchingAwayRefreshesRotatingArtifact(t *testing.T) {
 // TestSwitchingAwayRefreshesOwnedKeysWithoutExplicitSave reproduces "I set /effort
 // low + haiku on acc1, then set /effort mid + opus on acc2 — does switching between
 // them save the config?": a profile-owned key (model/effort) changed live via /model
-// or /effort, with no explicit `charon save`, must still be captured into the
+// or /effort, with no explicit `1api save`, must still be captured into the
 // outgoing profile before it's left, the same way refreshKeychainArtifacts does for
 // rotating credentials.
 func TestSwitchingAwayRefreshesOwnedKeysWithoutExplicitSave(t *testing.T) {
@@ -584,7 +584,7 @@ func TestSwitchingAwayRefreshesOwnedKeysWithoutExplicitSave(t *testing.T) {
 	}
 
 	// Back on "default" (still active): the user runs /model and /effort live,
-	// without ever calling `charon save`.
+	// without ever calling `1api save`.
 	write(t, cfg, `{"model":"claude-sonnet","effortLevel":"high"}`)
 
 	// Switching to acc2 must capture that live edit into default's own snapshot first.
@@ -610,7 +610,7 @@ func TestSwitchingAwayRefreshesOwnedKeysWithoutExplicitSave(t *testing.T) {
 	}
 }
 
-// TestApplyPreservesLiveNonOwnedPreference reproduces "switching charon profiles
+// TestApplyPreservesLiveNonOwnedPreference reproduces "switching 1api profiles
 // resets Claude Code's /model or /effort choice": settings.json mixes a profile-owned
 // field ("model") with a live CLI preference ("theme") that switching must not touch.
 func TestApplyPreservesLiveNonOwnedPreference(t *testing.T) {
@@ -662,7 +662,7 @@ func TestDriftIgnoresLiveNonOwnedPreference(t *testing.T) {
 		t.Fatalf("drift = %v, err = %v; want false, nil (preference-only change)", drift, err)
 	}
 	// A change to the owned field is real drift.
-	write(t, cfg, `{"model":"changed-outside-charon","theme":"light"}`)
+	write(t, cfg, `{"model":"changed-outside-1api","theme":"light"}`)
 	if drift, err := s.Drift(tool); err != nil || !drift {
 		t.Fatalf("drift = %v, err = %v; want true, nil (owned field changed)", drift, err)
 	}
@@ -724,7 +724,7 @@ func TestOpenCodeProfileModelEffort(t *testing.T) {
 		"$schema": "https://opencode.ai/config.json",
 		"agents": {
 			"coder": {
-				"model": "charon/deepseek-r1",
+				"model": "1api/deepseek-r1",
 				"reasoningEffort": "medium"
 			}
 		}
@@ -978,7 +978,7 @@ func TestDriftDetectsExternalChange(t *testing.T) {
 		t.Fatalf("drift = %v, err = %v; want false, nil", drift, err)
 	}
 	// An external edit to the live config must register as drift.
-	write(t, cfg, "changed-outside-charon")
+	write(t, cfg, "changed-outside-1api")
 	if drift, err := s.Drift(tool); err != nil || !drift {
 		t.Fatalf("drift = %v, err = %v; want true, nil", drift, err)
 	}
@@ -1132,7 +1132,7 @@ func TestSnapshotVerification(t *testing.T) {
 // TestOpenCodeSwitchOverwritesJSONCWithComments locks the bug where live
 // opencode.jsonc contains // comments: Merge used to fail parse and leave
 // snapshot-only writes that then got "refreshed" back from unparseable live,
-// so switch appeared to only update ~/.config/charon/profiles.
+// so switch appeared to only update ~/.config/1api/profiles.
 func TestOpenCodeSwitchOverwritesJSONCWithComments(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -1146,11 +1146,11 @@ func TestOpenCodeSwitchOverwritesJSONCWithComments(t *testing.T) {
 	live := `{
   "$schema": "https://opencode.ai/config.json",
   "theme": "manual-theme",
-  "model": "charon/manual",
+  "model": "1api/manual",
   "provider": {
-    "charon": {
+    "1api": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "charon",
+      "name": "1api",
       "options": {"baseURL": "https://manual.example/v1", "apiKey": "sk-manual"},
       "models": {"manual": {"name": "manual"}}
     }
@@ -1158,7 +1158,7 @@ func TestOpenCodeSwitchOverwritesJSONCWithComments(t *testing.T) {
   "agent": {
     "compaction": {
       // comment
-      "model": "charon/low"
+      "model": "1api/low"
     }
   }
 }
@@ -1211,11 +1211,11 @@ func TestOpenCodeSwitchOverwritesJSONCWithComments(t *testing.T) {
 	if err := os.WriteFile(livePath, []byte(`{
   "$schema": "https://opencode.ai/config.json",
   "theme": "after-hand-edit",
-  "model": "charon/hand",
+  "model": "1api/hand",
   "provider": {
-    "charon": {
+    "1api": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "charon",
+      "name": "1api",
       "options": {"baseURL": "https://hand.example/v1", "apiKey": "sk-hand"},
       "models": {"hand": {"name": "hand"}}
     }
@@ -1223,7 +1223,7 @@ func TestOpenCodeSwitchOverwritesJSONCWithComments(t *testing.T) {
   "agent": {
     "compaction": {
       // still comments
-      "model": "charon/low"
+      "model": "1api/low"
     }
   }
 }
@@ -1243,12 +1243,12 @@ func TestOpenCodeSwitchOverwritesJSONCWithComments(t *testing.T) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		t.Fatalf("live after switch must be pure JSON: %v\n%s", err, data)
 	}
-	if cfg["model"] != "charon/manual" {
-		t.Errorf("model = %v, want charon/manual (profile owned)", cfg["model"])
+	if cfg["model"] != "1api/manual" {
+		t.Errorf("model = %v, want 1api/manual (profile owned)", cfg["model"])
 	}
 	prov, _ := cfg["provider"].(map[string]any)
-	charon, _ := prov["charon"].(map[string]any)
-	opts, _ := charon["options"].(map[string]any)
+	managed, _ := prov["1api"].(map[string]any)
+	opts, _ := managed["options"].(map[string]any)
 	if opts["baseURL"] != "https://manual.example/v1" {
 		t.Errorf("baseURL = %v, want manual profile endpoint", opts["baseURL"])
 	}
@@ -1278,8 +1278,8 @@ func TestOpenCodeSwitchRestoresTieredAgents(t *testing.T) {
   "$schema": "https://opencode.ai/config.json",
   "theme": "t",
   "agent": {
-    "oracle": {"model": "charon/placeholder"},
-    "build": {"model": "charon/placeholder"}
+    "oracle": {"model": "1api/placeholder"},
+    "build": {"model": "1api/placeholder"}
   }
 }`), 0o600); err != nil {
 		t.Fatal(err)
@@ -1319,10 +1319,10 @@ func TestOpenCodeSwitchRestoresTieredAgents(t *testing.T) {
 	// Hand-edit live away from the profile.
 	if err := os.WriteFile(livePath, []byte(`{
   "theme": "hand",
-  "model": "charon/wrong",
-  "small_model": "charon/wrong-low",
-  "agent": {"compaction": {"model": "charon/wrong-low"}, "oracle": {"model": "charon/wrong-high"}},
-  "provider": {"charon": {"options": {"baseURL": "https://wrong/", "apiKey": "sk-wrong"}, "models": {"wrong": {"name": "wrong"}}}}
+  "model": "1api/wrong",
+  "small_model": "1api/wrong-low",
+  "agent": {"compaction": {"model": "1api/wrong-low"}, "oracle": {"model": "1api/wrong-high"}},
+  "provider": {"1api": {"options": {"baseURL": "https://wrong/", "apiKey": "sk-wrong"}, "models": {"wrong": {"name": "wrong"}}}}
 }`), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -1339,27 +1339,27 @@ func TestOpenCodeSwitchRestoresTieredAgents(t *testing.T) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		t.Fatalf("parse live: %v\n%s", err, data)
 	}
-	if cfg["model"] != "charon/mid" {
-		t.Errorf("model = %v, want charon/mid", cfg["model"])
+	if cfg["model"] != "1api/mid" {
+		t.Errorf("model = %v, want 1api/mid", cfg["model"])
 	}
-	if cfg["small_model"] != "charon/low" {
-		t.Errorf("small_model = %v, want charon/low", cfg["small_model"])
+	if cfg["small_model"] != "1api/low" {
+		t.Errorf("small_model = %v, want 1api/low", cfg["small_model"])
 	}
 	if cfg["theme"] != "hand" {
 		t.Errorf("theme = %v, want hand (non-owned)", cfg["theme"])
 	}
 	agent, _ := cfg["agent"].(map[string]any)
 	comp, _ := agent["compaction"].(map[string]any)
-	if comp["model"] != "charon/low" {
+	if comp["model"] != "1api/low" {
 		t.Errorf("compaction = %#v", comp)
 	}
 	oracle, _ := agent["oracle"].(map[string]any)
-	if oracle["model"] != "charon/high" {
+	if oracle["model"] != "1api/high" {
 		t.Errorf("oracle = %#v", oracle)
 	}
 	prov, _ := cfg["provider"].(map[string]any)
-	charon, _ := prov["charon"].(map[string]any)
-	opts, _ := charon["options"].(map[string]any)
+	managed, _ := prov["1api"].(map[string]any)
+	opts, _ := managed["options"].(map[string]any)
 	if opts["baseURL"] != "https://tier.example/v1" || opts["apiKey"] != "sk-tier" {
 		t.Errorf("provider options = %#v", opts)
 	}

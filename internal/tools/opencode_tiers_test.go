@@ -50,27 +50,27 @@ func TestAgentTierClass(t *testing.T) {
 func TestApplyOpenCodeTierRouting(t *testing.T) {
 	cfg := map[string]any{
 		"agent": map[string]any{
-			"build":      map[string]any{"model": "charon/old"},
-			"compaction": map[string]any{"model": "charon/old-low"},
-			"oracle":     map[string]any{"model": "openai/gpt-4"}, // non-charon: leave
+			"build":      map[string]any{"model": "1api/old"},
+			"compaction": map[string]any{"model": "1api/old-low"},
+			"oracle":     map[string]any{"model": "openai/gpt-4"}, // non-1api: leave
 		},
 	}
 	applyOpenCodeTierRouting(cfg, opencodeTierModels{Mid: "mid", Low: "low", High: "high"})
-	if cfg["model"] != "charon/mid" {
+	if cfg["model"] != "1api/mid" {
 		t.Errorf("model = %v", cfg["model"])
 	}
-	if cfg["small_model"] != "charon/low" {
+	if cfg["small_model"] != "1api/low" {
 		t.Errorf("small_model = %v", cfg["small_model"])
 	}
 	agents := cfg["agent"].(map[string]any)
-	if agents["build"].(map[string]any)["model"] != "charon/mid" {
+	if agents["build"].(map[string]any)["model"] != "1api/mid" {
 		t.Errorf("build = %#v", agents["build"])
 	}
-	if agents["compaction"].(map[string]any)["model"] != "charon/low" {
+	if agents["compaction"].(map[string]any)["model"] != "1api/low" {
 		t.Errorf("compaction = %#v", agents["compaction"])
 	}
 	if agents["oracle"].(map[string]any)["model"] != "openai/gpt-4" {
-		t.Errorf("non-charon oracle must be preserved: %#v", agents["oracle"])
+		t.Errorf("non-1api oracle must be preserved: %#v", agents["oracle"])
 	}
 }
 
@@ -81,9 +81,9 @@ func TestOpenCodeApplyAuthTierRoutingLive(t *testing.T) {
   "$schema": "https://opencode.ai/config.json",
   "theme": "keep-me",
   "agent": {
-    "build": {"model": "charon/stale"},
-    "compaction": {"model": "charon/stale-low"},
-    "oracle": {"model": "charon/stale-high"}
+    "build": {"model": "1api/stale"},
+    "compaction": {"model": "1api/stale-low"},
+    "oracle": {"model": "1api/stale-high"}
   },
   "provider": {
     "myllm": {"name": "mine"}
@@ -127,24 +127,24 @@ func TestOpenCodeApplyAuthTierRoutingLive(t *testing.T) {
 	if cfg.Theme != "keep-me" {
 		t.Errorf("theme = %q, want keep-me", cfg.Theme)
 	}
-	if cfg.Model != "charon/mid" {
-		t.Errorf("model = %q, want charon/mid", cfg.Model)
+	if cfg.Model != "1api/mid" {
+		t.Errorf("model = %q, want 1api/mid", cfg.Model)
 	}
-	if cfg.SmallModel != "charon/low" {
-		t.Errorf("small_model = %q, want charon/low", cfg.SmallModel)
+	if cfg.SmallModel != "1api/low" {
+		t.Errorf("small_model = %q, want 1api/low", cfg.SmallModel)
 	}
-	if cfg.Agent["build"].Model != "charon/mid" {
+	if cfg.Agent["build"].Model != "1api/mid" {
 		t.Errorf("agent.build = %q", cfg.Agent["build"].Model)
 	}
-	if cfg.Agent["compaction"].Model != "charon/low" {
+	if cfg.Agent["compaction"].Model != "1api/low" {
 		t.Errorf("agent.compaction = %q", cfg.Agent["compaction"].Model)
 	}
-	if cfg.Agent["oracle"].Model != "charon/high" {
-		t.Errorf("agent.oracle = %q, want charon/high", cfg.Agent["oracle"].Model)
+	if cfg.Agent["oracle"].Model != "1api/high" {
+		t.Errorf("agent.oracle = %q, want 1api/high", cfg.Agent["oracle"].Model)
 	}
-	p, ok := cfg.Provider["charon"]
+	p, ok := cfg.Provider["1api"]
 	if !ok {
-		t.Fatal("charon provider missing")
+		t.Fatal("1api provider missing")
 	}
 	if p.Options.BaseURL != "https://proxy.example/v1" || p.Options.APIKey != "sk-tier" {
 		t.Errorf("options = %#v", p.Options)
@@ -192,10 +192,10 @@ func TestOpenCodeApplyAuthCreatesCompactionWhenMissing(t *testing.T) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		t.Fatal(err)
 	}
-	if cfg.SmallModel != "charon/low" {
+	if cfg.SmallModel != "1api/low" {
 		t.Errorf("small_model = %q", cfg.SmallModel)
 	}
-	if cfg.Agent["compaction"].Model != "charon/low" {
+	if cfg.Agent["compaction"].Model != "1api/low" {
 		t.Errorf("auto compaction = %#v", cfg.Agent)
 	}
 }

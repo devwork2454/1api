@@ -109,7 +109,7 @@ func TestOpenCodeAccountDetectedDespiteUnrelatedAPIKeyEntry(t *testing.T) {
 	}
 }
 
-func TestOpenCodeDescribeFallsBackToNonCharonProviderEndpoint(t *testing.T) {
+func TestOpenCodeDescribeFallsBackToNonManagedProviderEndpoint(t *testing.T) {
 	home := sandboxHome(t)
 	writeFile(t, filepath.Join(home, ".config", "opencode", "opencode.jsonc"),
 		`{"provider":{"myllm":{"options":{"baseURL":"https://mine/v1"}}}}`)
@@ -122,7 +122,7 @@ func TestOpenCodeDescribeFallsBackToNonCharonProviderEndpoint(t *testing.T) {
 
 func TestOpenCodeConfigPathPrefersExistingJSONC(t *testing.T) {
 	home := sandboxHome(t)
-	// No config yet: charon must default to the jsonc path.
+	// No config yet: 1api must default to the jsonc path.
 	if got, want := opencodeConfigPath(), filepath.Join(home, ".config", "opencode", "opencode.jsonc"); got != want {
 		t.Errorf("default config path = %q, want %q", got, want)
 	}

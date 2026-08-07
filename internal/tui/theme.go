@@ -12,7 +12,7 @@ import (
 // The TUI mostly respects the terminal's own theme — plain text renders in the
 // default foreground, and hints/dividers come from the standard ANSI palette.
 // The brand teal is reserved for the few spots that should always read as
-// "Charon", regardless of terminal scheme: the header bar, the selected row,
+// "1API", regardless of terminal scheme: the header bar, the selected row,
 // focused input, and the banner wordmark.
 var (
 	colorBrand  = lipgloss.Color("#377375")                                 // brand teal — header fill, selection
@@ -54,16 +54,16 @@ func newSpinner() spinner.Model {
 	return s
 }
 
-// charonDelegate is the list delegate that additionally draws the sepSentinel
+// apiDelegate is the list delegate that additionally draws the sepSentinel
 // row as a single dim rule — a tight, visible divider between data and action rows.
-type charonDelegate struct {
+type apiDelegate struct {
 	list.DefaultDelegate
 }
 
 // dividerWidth caps the rule at a modest width so it reads as a separator, not a border.
 const dividerWidth = 18
 
-func (d charonDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
+func (d apiDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
 	it, ok := listItem.(item)
 	if !ok {
 		d.DefaultDelegate.Render(w, m, index, listItem)
@@ -116,14 +116,14 @@ func baseDelegate() list.DefaultDelegate {
 }
 
 // themedDelegate is the two-line row delegate (title + description).
-func themedDelegate() charonDelegate {
-	return charonDelegate{DefaultDelegate: baseDelegate()}
+func themedDelegate() apiDelegate {
+	return apiDelegate{DefaultDelegate: baseDelegate()}
 }
 
 // themedCompactDelegate is the same styling with single-line rows (no description),
 // keeping the one-line row gap so spacing stays consistent with the other screens.
-func themedCompactDelegate() charonDelegate {
+func themedCompactDelegate() apiDelegate {
 	d := baseDelegate()
 	d.ShowDescription = false
-	return charonDelegate{DefaultDelegate: d}
+	return apiDelegate{DefaultDelegate: d}
 }

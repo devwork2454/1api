@@ -11,7 +11,7 @@ func TestUpdateInstallURLDefaultIsFork(t *testing.T) {
 	// t.Setenv with empty still sets empty string which our code treats as override if TrimSpace != "".
 	// So only unset via empty: our updateInstallURL uses TrimSpace empty → default.
 	got := updateInstallURL()
-	if !strings.Contains(got, "devwork2454/charon") {
+	if !strings.Contains(got, "devwork2454/1api") {
 		t.Errorf("default update URL = %q, want fork devwork2454", got)
 	}
 	if strings.Contains(got, "mingtheanlay") {
@@ -23,7 +23,7 @@ func TestUpdateInstallURLDefaultIsFork(t *testing.T) {
 }
 
 func TestUpdateInstallURLOverride(t *testing.T) {
-	want := "https://example.test/charon/install.sh"
+	want := "https://example.test/1api/install.sh"
 	t.Setenv("CHARON_UPDATE_URL", want)
 	if got := updateInstallURL(); got != want {
 		t.Errorf("got %q, want %q", got, want)

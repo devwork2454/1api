@@ -84,9 +84,9 @@ func TestLoadJSONMapWithComments(t *testing.T) {
 	raw := `{
   "theme": "dark",
   // manual note
-  "model": "charon/mid",
+  "model": "1api/mid",
   "provider": {
-    "charon": {
+    "1api": {
       "options": {"baseURL": "https://a.example/v1", "apiKey": "sk-a"}
     }
   }
@@ -99,7 +99,7 @@ func TestLoadJSONMapWithComments(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadJSONMap with comments: %v", err)
 	}
-	if m["theme"] != "dark" || m["model"] != "charon/mid" {
+	if m["theme"] != "dark" || m["model"] != "1api/mid" {
 		t.Errorf("got %#v", m)
 	}
 }

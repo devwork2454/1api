@@ -1,11 +1,11 @@
 package main
 
 // Shell completion scripts. They complete subcommands and tool names statically,
-// and profile names dynamically by shelling out to the hidden `charon __profiles`.
+// and profile names dynamically by shelling out to the hidden `1api __profiles`.
 // Kept free of backticks so they can live in Go raw string literals.
 
-const bashCompletion = `# bash completion for charon
-_charon() {
+const bashCompletion = `# bash completion for 1api
+_1api() {
     local cur cword cmds tools sub
     cur="${COMP_WORDS[COMP_CWORD]}"
     cword=$COMP_CWORD
@@ -28,7 +28,7 @@ _charon() {
                     COMPREPLY=( $(compgen -W "$tools" -- "$cur") )
                 fi
             elif [ "$cword" -eq 3 ]; then
-                COMPREPLY=( $(compgen -W "$(charon __profiles "${COMP_WORDS[2]}" 2>/dev/null)" -- "$cur") )
+                COMPREPLY=( $(compgen -W "$(1api __profiles "${COMP_WORDS[2]}" 2>/dev/null)" -- "$cur") )
             fi
             ;;
         ls|save|models|add|status|undo|prune|restore)
@@ -43,12 +43,12 @@ _charon() {
             ;;
     esac
 }
-complete -F _charon charon
+complete -F _1api 1api
 `
 
-const zshCompletion = `#compdef charon
-# zsh completion for charon
-_charon() {
+const zshCompletion = `#compdef 1api
+# zsh completion for 1api
+_1api() {
     local -a cmds tools
     cmds=(status ls save models add edit rename cp switch use run alias restore undo prune rm completion version help)
     tools=(codex claude opencode pi)
@@ -64,14 +64,14 @@ _charon() {
             if (( CURRENT == 3 )); then
                 compadd -- $tools
             elif (( CURRENT == 4 )); then
-                compadd -- ${(f)"$(charon __profiles ${words[3]} 2>/dev/null)"}
+                compadd -- ${(f)"$(1api __profiles ${words[3]} 2>/dev/null)"}
             fi
             ;;
         run|alias)
             if (( CURRENT == 3 )); then
                 compadd -- $session_tools
             elif (( CURRENT == 4 )); then
-                compadd -- ${(f)"$(charon __profiles ${words[3]} 2>/dev/null)"}
+                compadd -- ${(f)"$(1api __profiles ${words[3]} 2>/dev/null)"}
             fi
             ;;
         ls|save|models|add|status|undo|prune|restore)
@@ -82,11 +82,11 @@ _charon() {
             ;;
     esac
 }
-compdef _charon charon
+compdef _1api 1api
 `
 
-const fishCompletion = `# fish completion for charon
-function __charon_needs_tool
+const fishCompletion = `# fish completion for 1api
+function __1api_needs_tool
     set -l cmd (commandline -opc)
     if test (count $cmd) -eq 2
         switch $cmd[2]
@@ -97,7 +97,7 @@ function __charon_needs_tool
     return 1
 end
 
-function __charon_needs_profile
+function __1api_needs_profile
     set -l cmd (commandline -opc)
     if test (count $cmd) -eq 3
         switch $cmd[2]
@@ -108,15 +108,15 @@ function __charon_needs_profile
     return 1
 end
 
-function __charon_profiles
+function __1api_profiles
     set -l cmd (commandline -opc)
     if test (count $cmd) -ge 3
-        charon __profiles $cmd[3] 2>/dev/null
+        1api __profiles $cmd[3] 2>/dev/null
     end
 end
 
-complete -c charon -f
-complete -c charon -n '__fish_use_subcommand' -a 'status ls save models add edit rename cp switch use run alias restore undo prune rm completion version help'
-complete -c charon -n '__charon_needs_tool' -a 'codex claude opencode pi'
-complete -c charon -n '__charon_needs_profile' -a '(__charon_profiles)'
+complete -c 1api -f
+complete -c 1api -n '__fish_use_subcommand' -a 'status ls save models add edit rename cp switch use run alias restore undo prune rm completion version help'
+complete -c 1api -n '__1api_needs_tool' -a 'codex claude opencode pi'
+complete -c 1api -n '__1api_needs_profile' -a '(__1api_profiles)'
 `

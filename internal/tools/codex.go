@@ -8,7 +8,7 @@ import (
 
 	toml "github.com/pelletier/go-toml/v2"
 
-	"charon/internal/artifact"
+	"1api/internal/artifact"
 )
 
 func home() string {
@@ -61,17 +61,17 @@ func newCodex() *Tool {
 			if w := claudeContextWindow(a.Model); w != 0 {
 				cfg["model_context_window"] = w
 			}
-			cfg["model_provider"] = "charon"
+			cfg["model_provider"] = "1api"
 			providers := subMap(cfg, "model_providers")
-			original := snapshotProviders(providers) // guard: write may only touch "charon"
-			providers["charon"] = map[string]any{
-				"name":     "charon",
+			original := snapshotProviders(providers) // guard: write may only touch "1api"
+			providers["1api"] = map[string]any{
+				"name":     "1api",
 				"base_url": a.Endpoint,
 				// "responses" is the only wire API since Codex dropped "chat" (openai/codex #7782).
 				"wire_api":                  "responses",
 				"experimental_bearer_token": a.Key,
 			}
-			if err := ensureOnlyCharonChanged(original, providers); err != nil {
+			if err := ensureOnlyManagedChanged(original, providers); err != nil {
 				return err
 			}
 			return writeTOMLMap(configPath, cfg, 0o600)

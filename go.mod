@@ -1,4 +1,4 @@
-module charon
+module 1api
 
 go 1.24.2
 

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"charon/internal/models"
+	"1api/internal/models"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textinput"

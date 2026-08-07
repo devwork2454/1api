@@ -37,11 +37,11 @@ func TestStripLineAndBlockComments(t *testing.T) {
 
 func TestUnmarshalJSONC(t *testing.T) {
 	raw := []byte(`{
-  "model": "charon/mid",
+  "model": "1api/mid",
   "agent": {
     "compaction": {
       // OpenCode alias note
-      "model": "charon/low"
+      "model": "1api/low"
     }
   }
 }`)
@@ -49,12 +49,12 @@ func TestUnmarshalJSONC(t *testing.T) {
 	if err := Unmarshal(raw, &m); err != nil {
 		t.Fatal(err)
 	}
-	if m["model"] != "charon/mid" {
+	if m["model"] != "1api/mid" {
 		t.Errorf("model = %v", m["model"])
 	}
 	agent, _ := m["agent"].(map[string]any)
 	comp, _ := agent["compaction"].(map[string]any)
-	if comp["model"] != "charon/low" {
+	if comp["model"] != "1api/low" {
 		t.Errorf("agent.compaction.model = %v", comp["model"])
 	}
 }

@@ -170,15 +170,15 @@ func TestAtomicWriteReplaces(t *testing.T) {
 func TestMergedJSONFileMergeWithJSONCComments(t *testing.T) {
 	a := NewMergedJSONFile("opencode.jsonc", filepath.Join(t.TempDir(), "opencode.jsonc"), 0o600, "provider", "model")
 
-	snapshot := []byte(`{"provider":{"charon":{"options":{"baseURL":"https://snap.example"}}},"model":"charon/snap","theme":"dark"}`)
+	snapshot := []byte(`{"provider":{"1api":{"options":{"baseURL":"https://snap.example"}}},"model":"1api/snap","theme":"dark"}`)
 	live := []byte(`{
-  "provider": {"charon": {"options": {"baseURL": "https://live.example"}}},
-  "model": "charon/live",
+  "provider": {"1api": {"options": {"baseURL": "https://live.example"}}},
+  "model": "1api/live",
   "theme": "light",
   "agent": {
     "compaction": {
       // comment
-      "model": "charon/low"
+      "model": "1api/low"
     }
   }
 }`)
@@ -191,7 +191,7 @@ func TestMergedJSONFileMergeWithJSONCComments(t *testing.T) {
 	if err := json.Unmarshal(merged, &got); err != nil {
 		t.Fatalf("merged not pure JSON: %v", err)
 	}
-	if got["model"] != "charon/snap" {
+	if got["model"] != "1api/snap" {
 		t.Errorf("model = %v, want snapshot", got["model"])
 	}
 	if got["theme"] != "light" {

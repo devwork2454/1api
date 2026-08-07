@@ -8,8 +8,8 @@ import (
 	"strings"
 	"syscall"
 
-	"charon/internal/profile"
-	"charon/internal/tools"
+	"1api/internal/profile"
+	"1api/internal/tools"
 )
 
 // exitError carries a process exit code without printing as a normal error message.
@@ -24,7 +24,7 @@ func (e *exitError) Error() string {
 // cmdRun launches a tool CLI under a temporary HOME/XDG populated from a profile.
 // Live config is never modified. MVP tools: codex, opencode.
 //
-//	charon run <tool> <profile> [--keep] [--] [args...]
+//	1api run <tool> <profile> [--keep] [--] [args...]
 func cmdRun(store *profile.Store, args []string) error {
 	keep := false
 	var positional []string
@@ -39,12 +39,12 @@ func cmdRun(store *profile.Store, args []string) error {
 			continue
 		}
 		if strings.HasPrefix(a, "-") {
-			return fmt.Errorf("unknown flag %q\nusage: charon run <tool> <profile> [--keep] [--] [args...]", a)
+			return fmt.Errorf("unknown flag %q\nusage: 1api run <tool> <profile> [--keep] [--] [args...]", a)
 		}
 		positional = append(positional, a)
 	}
 	if len(positional) < 2 {
-		return fmt.Errorf("usage: charon run <tool> <profile> [--keep] [--] [args...]")
+		return fmt.Errorf("usage: 1api run <tool> <profile> [--keep] [--] [args...]")
 	}
 	toolName, profileName := positional[0], positional[1]
 	childArgs := positional[2:]
@@ -65,14 +65,14 @@ func cmdRun(store *profile.Store, args []string) error {
 		return fmt.Errorf("%s not found on PATH: %w", binName, err)
 	}
 
-	root, err := os.MkdirTemp("", "charon-run-*")
+	root, err := os.MkdirTemp("", "1api-run-*")
 	if err != nil {
 		return err
 	}
 	if !keep {
 		defer func() { _ = os.RemoveAll(root) }()
 	} else {
-		fmt.Fprintf(os.Stderr, "charon: session dir kept at %s\n", root)
+		fmt.Fprintf(os.Stderr, "1api: session dir kept at %s\n", root)
 	}
 
 	if err := store.MaterializeSession(t, profileName, root); err != nil {
@@ -128,9 +128,9 @@ func mergeEnv(base, override []string) []string {
 	return out
 }
 
-// cmdAlias prints a shell alias or function for `charon run`.
+// cmdAlias prints a shell alias or function for `1api run`.
 //
-//	charon alias <tool> <profile> [--name NAME] [--shell bash|zsh]
+//	1api alias <tool> <profile> [--name NAME] [--shell bash|zsh]
 func cmdAlias(args []string) error {
 	name := ""
 	shell := "bash"
@@ -149,13 +149,13 @@ func cmdAlias(args []string) error {
 		case strings.HasPrefix(a, "--shell="):
 			shell = strings.TrimPrefix(a, "--shell=")
 		case strings.HasPrefix(a, "-"):
-			return fmt.Errorf("unknown flag %q\nusage: charon alias <tool> <profile> [--name NAME] [--shell bash|zsh]", a)
+			return fmt.Errorf("unknown flag %q\nusage: 1api alias <tool> <profile> [--name NAME] [--shell bash|zsh]", a)
 		default:
 			positional = append(positional, a)
 		}
 	}
 	if len(positional) < 2 {
-		return fmt.Errorf("usage: charon alias <tool> <profile> [--name NAME] [--shell bash|zsh]")
+		return fmt.Errorf("usage: 1api alias <tool> <profile> [--name NAME] [--shell bash|zsh]")
 	}
 	toolName, profileName := positional[0], positional[1]
 	t, err := requireTool(toolName)
@@ -173,10 +173,10 @@ func cmdAlias(args []string) error {
 		return fmt.Errorf("alias name is empty")
 	}
 
-	// Resolve charon path so aliases work even if charon is not on PATH later.
+	// Resolve 1api path so aliases work even if 1api is not on PATH later.
 	self, err := os.Executable()
 	if err != nil {
-		self = "charon"
+		self = "1api"
 	} else if resolved, rerr := filepath.EvalSymlinks(self); rerr == nil {
 		self = resolved
 	}

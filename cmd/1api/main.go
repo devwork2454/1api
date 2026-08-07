@@ -1,4 +1,4 @@
-// Command charon detects the Codex, Claude Code, OpenCode, and Pi CLIs and
+// Command 1api detects the Codex, Claude Code, OpenCode, and Pi CLIs and
 // switches their endpoint + credentials between saved profiles.
 package main
 
@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"os"
 
-	"charon/internal/profile"
-	"charon/internal/tools"
-	"charon/internal/tui"
+	"1api/internal/profile"
+	"1api/internal/tools"
+	"1api/internal/tui"
 )
 
 // version is set at build time via -ldflags (see .goreleaser.yaml).
@@ -19,7 +19,7 @@ func main() {
 		if ee, ok := err.(*exitError); ok {
 			os.Exit(ee.code)
 		}
-		fmt.Fprintln(os.Stderr, "charon: "+err.Error())
+		fmt.Fprintln(os.Stderr, "1api: "+err.Error())
 		os.Exit(1)
 	}
 }
@@ -32,7 +32,7 @@ func run(args []string) error {
 		case "uninstall":
 			return cmdUninstall()
 		case "version", "-v", "--version":
-			fmt.Println("charon " + version)
+			fmt.Println("1api " + version)
 			return nil
 		case "help", "-h", "--help":
 			printUsage()
@@ -106,33 +106,33 @@ func argAt(args []string, i int) string {
 }
 
 func printUsage() {
-	fmt.Print(`charon — detect and switch AI tool endpoints + credentials
+	fmt.Print(`1api — detect and switch AI tool endpoints + credentials
 
 Usage:
-  charon                     interactive menu
-  charon status              show each tool's active profile, endpoint and auth (--json)
-  charon ls <tool>           list saved profiles for a tool (--json)
-  charon save <tool> [name]  snapshot current live config as a profile
+  1api                     interactive menu
+  1api status              show each tool's active profile, endpoint and auth (--json)
+  1api ls <tool>           list saved profiles for a tool (--json)
+  1api save <tool> [name]  snapshot current live config as a profile
                              (omit name to auto-name after the logged-in account)
-  charon refresh <tool>      capture in-session changes (model, effort) into active profile
-  charon models <tool>       list models from an API (--key, --endpoint)
-  charon add <tool>          add+activate a profile (--name --key [--endpoint --model])
-  charon edit <tool> <p>     change a profile's endpoint/key/model/name
-  charon rename <tool> <o> <n>  rename a saved profile
-  charon cp <tool> <src> <dst>  duplicate a saved profile
-  charon switch <tool> <p>   apply a saved profile (backs up current first)
-  charon run <tool> <p>      start tool with profile in a temp HOME (session only)
+  1api refresh <tool>      capture in-session changes (model, effort) into active profile
+  1api models <tool>       list models from an API (--key, --endpoint)
+  1api add <tool>          add+activate a profile (--name --key [--endpoint --model])
+  1api edit <tool> <p>     change a profile's endpoint/key/model/name
+  1api rename <tool> <o> <n>  rename a saved profile
+  1api cp <tool> <src> <dst>  duplicate a saved profile
+  1api switch <tool> <p>   apply a saved profile (backs up current first)
+  1api run <tool> <p>      start tool with profile in a temp HOME (session only)
                              codex/opencode; --keep retains the sandbox dir
-  charon alias <tool> <p>    print a shell function wrapping charon run
+  1api alias <tool> <p>    print a shell function wrapping 1api run
                              [--name NAME] [--shell bash|zsh|fish]
-  charon restore <tool>      revert to the auto-captured default
-  charon undo <tool>         revert to the most recent pre-switch backup
-  charon prune <tool>        delete old backups, keeping the newest (--keep N)
-  charon rm <tool> <p>       delete a saved profile
-  charon completion <shell>  print a bash/zsh/fish completion script
-  charon update              upgrade from this fork's GitHub releases
+  1api restore <tool>      revert to the auto-captured default
+  1api undo <tool>         revert to the most recent pre-switch backup
+  1api prune <tool>        delete old backups, keeping the newest (--keep N)
+  1api rm <tool> <p>       delete a saved profile
+  1api completion <shell>  print a bash/zsh/fish completion script
+  1api update              upgrade from this fork's GitHub releases
                              (override URL with CHARON_UPDATE_URL)
-  charon uninstall           remove the installed charon binary
+  1api uninstall           remove the installed 1api binary
 
 Tools: codex, claude, opencode, pi
 Session run: codex, opencode

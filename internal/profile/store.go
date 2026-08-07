@@ -18,11 +18,11 @@ import (
 	"strings"
 	"time"
 
-	"charon/internal/artifact"
-	"charon/internal/tools"
+	"1api/internal/artifact"
+	"1api/internal/tools"
 )
 
-// DefaultName is the reserved profile capturing config as first seen by charon.
+// DefaultName is the reserved profile capturing config as first seen by 1api.
 const DefaultName = "default"
 
 // Spec is the endpoint/key/model a profile was created from, so the edit form can prefill.
@@ -44,7 +44,7 @@ type Manifest struct {
 	Active    string          `json:"active,omitempty"`  // profile active when a backup was taken, for undo
 }
 
-// Store is rooted at ~/.config/charon.
+// Store is rooted at ~/.config/1api.
 type Store struct {
 	Root string
 }
@@ -54,7 +54,7 @@ type config struct {
 	OAuthFingerprint map[string]string `json:"oauthFingerprint,omitempty"` // tool name -> last-seen OAuthFingerprint, to detect a fresh login
 }
 
-// Open returns the store rooted at $XDG_CONFIG_HOME/charon (default ~/.config/charon).
+// Open returns the store rooted at $XDG_CONFIG_HOME/1api (default ~/.config/1api).
 func Open() (*Store, error) {
 	base := os.Getenv("XDG_CONFIG_HOME")
 	if base == "" {
@@ -64,7 +64,7 @@ func Open() (*Store, error) {
 		}
 		base = filepath.Join(h, ".config")
 	}
-	root := filepath.Join(base, "charon")
+	root := filepath.Join(base, "1api")
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return nil, err
 	}
@@ -75,12 +75,12 @@ func (s *Store) toolDir(tool string) string    { return filepath.Join(s.Root, "p
 func (s *Store) profDir(tool, n string) string { return filepath.Join(s.toolDir(tool), n) }
 func (s *Store) configPath() string            { return filepath.Join(s.Root, "config.json") }
 
-// warn appends a timestamped line to charon.log for a failure in a best-effort
+// warn appends a timestamped line to 1api.log for a failure in a best-effort
 // operation (e.g. refreshing a profile snapshot before a switch) that is deliberately
 // not surfaced as a hard error — so it's still diagnosable instead of vanishing
 // silently. Never returns an error: logging itself is best-effort.
 func (s *Store) warn(context string, err error) {
-	f, oerr := os.OpenFile(filepath.Join(s.Root, "charon.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	f, oerr := os.OpenFile(filepath.Join(s.Root, "1api.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if oerr != nil {
 		return
 	}

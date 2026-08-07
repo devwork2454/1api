@@ -6,12 +6,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"charon/internal/artifact"
-	"charon/internal/tools"
+	"1api/internal/artifact"
+	"1api/internal/tools"
 )
 
 // MaterializeSession writes profile name's artifacts into sandbox root (a fake
-// HOME) without touching the live tool config. Used by `charon run`.
+// HOME) without touching the live tool config. Used by `1api run`.
 func (s *Store) MaterializeSession(t *tools.Tool, name, root string) error {
 	if err := validateName(name); err != nil {
 		return err

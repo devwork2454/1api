@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"charon/internal/artifact"
-	"charon/internal/tools"
+	"1api/internal/artifact"
+	"1api/internal/tools"
 )
 
 // Apply restores a stored profile over the live config (backing up current first) and marks it active.
@@ -42,7 +42,7 @@ func (s *Store) Undo(t *tools.Tool) (restoredFrom string, err error) {
 
 // switchTo backs up the tool's current live state, restores sourceDir over it, and
 // marks resultingActive active (skipped when empty, as Undo has none to restore
-// from a backup taken before charon tracked the active profile). Shared by Apply
+// from a backup taken before 1api tracked the active profile). Shared by Apply
 // and Undo so the backup→restore→prune sequence can't drift between them.
 func (s *Store) switchTo(t *tools.Tool, sourceDir, backupLabel, resultingActive string) (backupDir string, err error) {
 	s.refreshKeychainArtifacts(t)

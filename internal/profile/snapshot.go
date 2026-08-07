@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"charon/internal/artifact"
-	"charon/internal/tools"
+	"1api/internal/artifact"
+	"1api/internal/tools"
 )
 
 // snapshot captures the tool's current live artifacts into dir.
@@ -234,13 +234,13 @@ func (s *Store) EnsureDefault(t *tools.Tool) error {
 }
 
 // freshOAuthLogin reports whether the *official* OAuth credential changed since
-// charon last recorded it — i.e. a login just happened, not merely "a token
+// 1api last recorded it — i.e. a login just happened, not merely "a token
 // exists" (true forever after the first login) and not some other credential
-// write (e.g. charon's own `switch` rewriting auth.json with a profile's API
+// write (e.g. 1api's own `switch` rewriting auth.json with a profile's API
 // key). Only fingerprints while OfficialOAuth() is true, so switching to/from a
 // custom profile never looks like a login. The first time a fingerprint is seen
 // it's recorded as a baseline rather than treated as a login, so upgrading
-// charon on an existing official-OAuth setup doesn't surprise-switch anyone.
+// 1api on an existing official-OAuth setup doesn't surprise-switch anyone.
 func (s *Store) freshOAuthLogin(t *tools.Tool) (bool, error) {
 	if t.OAuthFingerprint == nil || t.OfficialOAuth == nil || !t.OfficialOAuth() {
 		return false, nil
@@ -274,7 +274,7 @@ func (s *Store) recordOAuthBaseline(t *tools.Tool) error {
 
 // reconcileActiveCustomProfile re-activates a saved custom profile when live
 // routing was pointed at it directly (e.g. a manual config edit) instead of
-// through charon switch. Only fires on a unique endpoint match; an endpoint
+// through 1api switch. Only fires on a unique endpoint match; an endpoint
 // matching no saved profile, or matching more than one, is left as-is — the
 // "default" label stays, and status/ls already show the live endpoint and a
 // "(modified)" marker via Drift.

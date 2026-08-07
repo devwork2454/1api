@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"charon/internal/tools"
+	"1api/internal/tools"
 )
 
 func TestMaterializeSessionCodexIsolatesFromLive(t *testing.T) {
@@ -40,7 +40,7 @@ func TestMaterializeSessionCodexIsolatesFromLive(t *testing.T) {
 	if err := os.MkdirAll(prof, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	snapCfg := []byte("model = \"work-model\"\nmodel_provider = \"charon\"\n")
+	snapCfg := []byte("model = \"work-model\"\nmodel_provider = \"1api\"\n")
 	snapAuth := []byte(`{"auth_mode":"apikey","OPENAI_API_KEY":"sk-work"}`)
 	if err := os.WriteFile(filepath.Join(prof, "config.toml"), snapCfg, 0o600); err != nil {
 		t.Fatal(err)
@@ -97,7 +97,7 @@ func TestMaterializeSessionOpenCodePaths(t *testing.T) {
 	if err := os.MkdirAll(prof, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	cfg := []byte(`{"model":"charon/gpt","provider":{"charon":{"options":{"baseURL":"https://x"}}}}`)
+	cfg := []byte(`{"model":"1api/gpt","provider":{"1api":{"options":{"baseURL":"https://x"}}}}`)
 	auth := []byte(`{}`)
 	if err := os.WriteFile(filepath.Join(prof, "opencode.jsonc"), cfg, 0o600); err != nil {
 		t.Fatal(err)

@@ -1,4 +1,4 @@
-// Package tui provides the interactive arrow-key menu for charon.
+// Package tui provides the interactive arrow-key menu for 1api.
 //
 // The model is split across a few files in this package:
 //   - tui.go     the model, lifecycle (Run/Init/Update) and top-level navigation
@@ -11,9 +11,9 @@ import (
 	"fmt"
 	"time"
 
-	"charon/internal/profile"
-	"charon/internal/secret"
-	"charon/internal/tools"
+	"1api/internal/profile"
+	"1api/internal/secret"
+	"1api/internal/tools"
 
 	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/key"
@@ -259,7 +259,7 @@ func (m *model) loadTools() {
 	m.list.SetDelegate(themedDelegate()) // two-line rows show each tool's status
 	m.list.SetItems(items)
 	m.list.Select(selectedIndex)
-	m.list.Title = "Charon — select a tool"
+	m.list.Title = "1API — select a tool"
 	m.setHelpKeys(keyOpen)
 }
 
@@ -272,7 +272,7 @@ func (m *model) loadProfiles(selectName string) {
 	var items []list.Item
 	active := m.store.Active(m.tool.Name)
 	saved := m.store.List(m.tool.Name)
-	drift, _ := m.store.Drift(m.tool) // live config changed outside charon?
+	drift, _ := m.store.Drift(m.tool) // live config changed outside 1api?
 	target := selectName
 	if target == "" {
 		target = active
@@ -313,7 +313,7 @@ func (m *model) loadProfiles(selectName string) {
 
 // profileDetail is the second-line summary of a profile: its endpoint, model, and
 // reasoning-effort level when known, falling back to the manifest label for profiles
-// charon captured rather than created itself.
+// 1api captured rather than created itself.
 func (m *model) profileDetail(name string) string {
 	model, effort := m.store.ProfileModelEffort(m.tool, name)
 	liveEndpoint := ""

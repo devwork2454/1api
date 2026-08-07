@@ -10,7 +10,7 @@ import (
 
 	toml "github.com/pelletier/go-toml/v2"
 
-	"charon/internal/artifact"
+	"1api/internal/artifact"
 )
 
 // sandboxHome points HOME (and USER) at a temp dir so tool paths resolve there
@@ -181,10 +181,10 @@ func TestCodexKeepsUserProvider(t *testing.T) {
 		t.Fatal(err)
 	}
 	if p, ok := cfg.ModelProviders["myllm"]; !ok || p.BaseURL != "https://mine/v1" {
-		t.Errorf("charon altered or removed the user's provider 'myllm': %#v", cfg.ModelProviders["myllm"])
+		t.Errorf("1api altered or removed the user's provider 'myllm': %#v", cfg.ModelProviders["myllm"])
 	}
-	if _, ok := cfg.ModelProviders["charon"]; !ok {
-		t.Error("charon provider not added")
+	if _, ok := cfg.ModelProviders["1api"]; !ok {
+		t.Error("1api provider not added")
 	}
 }
 
@@ -424,7 +424,7 @@ func TestOpenCodeDescribeAndApply(t *testing.T) {
 	}
 
 	// The provider (with key in options.apiKey and a models map) must be written
-	// into the config. With no existing config file, charon defaults to the
+	// into the config. With no existing config file, 1api defaults to the
 	// current opencode.jsonc name; auth.json must keep its existing login.
 	var cfg struct {
 		Model           string `json:"model"`
@@ -440,9 +440,9 @@ func TestOpenCodeDescribeAndApply(t *testing.T) {
 	jsoncPath := filepath.Join(home, ".config", "opencode", "opencode.jsonc")
 	cfgData, _ := os.ReadFile(jsoncPath)
 	_ = json.Unmarshal(cfgData, &cfg)
-	p, ok := cfg.Provider["charon"]
+	p, ok := cfg.Provider["1api"]
 	if !ok {
-		t.Fatal("provider 'charon' not written to opencode.jsonc")
+		t.Fatal("provider '1api' not written to opencode.jsonc")
 	}
 	if p.Options.APIKey != "sk-or-123456789" {
 		t.Errorf("apiKey not in options: %#v", p.Options)
@@ -479,7 +479,7 @@ func TestOpenCodeDescribeAndApply(t *testing.T) {
 		"$schema": "https://opencode.ai/config.json",
 		"agents": {
 			"coder": {
-				"model": "charon/deepseek-v4",
+				"model": "1api/deepseek-v4",
 				"reasoningEffort": "high"
 			}
 		}
@@ -500,20 +500,20 @@ func TestOpenCodeDescribeAndApply(t *testing.T) {
 }
 
 // TestOpenCodeAppliesModelRegistersIt reproduces the CLI path (no fetched model
-// list) applying a new model id while the charon provider already lists a
+// list) applying a new model id while the 1api provider already lists a
 // different one: the active model must always be registered in the provider's
 // models map, otherwise cfg["model"] points at a model opencode can't select and
 // it silently falls back to its own default.
 func TestOpenCodeAppliesModelRegistersIt(t *testing.T) {
 	home := sandboxHome(t)
 	jsoncPath := filepath.Join(home, ".config", "opencode", "opencode.jsonc")
-	// Live config already has a charon provider with one previously-registered model.
+	// Live config already has a 1api provider with one previously-registered model.
 	writeFile(t, jsoncPath, `{
   "$schema": "https://opencode.ai/config.json",
-  "model": "charon/deepseek-v4-flash",
+  "model": "1api/deepseek-v4-flash",
   "provider": {
-    "charon": {
-      "name": "charon",
+    "1api": {
+      "name": "1api",
       "npm": "@ai-sdk/openai-compatible",
       "options": {"baseURL": "https://yunwu.ai", "apiKey": "sk-old"},
       "models": {"deepseek-v4-flash": {"name": "deepseek-v4-flash"}}
@@ -537,12 +537,12 @@ func TestOpenCodeAppliesModelRegistersIt(t *testing.T) {
 	if err := json.Unmarshal(cfgData, &cfg); err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Model != "charon/grok-4.5" {
-		t.Fatalf("model = %q, want %q", cfg.Model, "charon/grok-4.5")
+	if cfg.Model != "1api/grok-4.5" {
+		t.Fatalf("model = %q, want %q", cfg.Model, "1api/grok-4.5")
 	}
-	p, ok := cfg.Provider["charon"]
+	p, ok := cfg.Provider["1api"]
 	if !ok {
-		t.Fatal("provider 'charon' missing")
+		t.Fatal("provider '1api' missing")
 	}
 	if _, ok := p.Models["grok-4.5"]; !ok {
 		t.Errorf("active model %q not registered in provider models map %#v; opencode can't select it",
@@ -566,10 +566,10 @@ func TestOpenCodeEditsExistingJsoncInPlace(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// charon must edit the existing opencode.jsonc, not write a second
+	// 1api must edit the existing opencode.jsonc, not write a second
 	// opencode.json that opencode would ignore.
 	if _, err := os.Stat(filepath.Join(dir, "opencode.json")); err == nil {
-		t.Error("charon wrote a stray opencode.json instead of editing opencode.jsonc")
+		t.Error("1api wrote a stray opencode.json instead of editing opencode.jsonc")
 	}
 
 	var cfg struct {
@@ -579,37 +579,37 @@ func TestOpenCodeEditsExistingJsoncInPlace(t *testing.T) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		t.Fatal(err)
 	}
-	// The user's original provider must survive untouched alongside charon's.
+	// The user's original provider must survive untouched alongside 1api's.
 	if _, ok := cfg.Provider["myllm"]; !ok {
-		t.Error("charon removed the user's original provider 'myllm'")
+		t.Error("1api removed the user's original provider 'myllm'")
 	}
-	if _, ok := cfg.Provider["charon"]; !ok {
-		t.Error("charon provider not added to opencode.jsonc")
+	if _, ok := cfg.Provider["1api"]; !ok {
+		t.Error("1api provider not added to opencode.jsonc")
 	}
 }
 
-func TestEnsureOnlyCharonChanged(t *testing.T) {
+func TestEnsureOnlyManagedChanged(t *testing.T) {
 	provider := map[string]any{
-		"myllm":  map[string]any{"name": "mine"},
-		"charon": map[string]any{"name": "charon"},
+		"myllm": map[string]any{"name": "mine"},
+		"1api":  map[string]any{"name": "1api"},
 	}
 	original := snapshotProviders(provider) // captures myllm only
 
-	// Updating only charon is allowed.
-	provider["charon"] = map[string]any{"name": "charon", "options": map[string]any{"baseURL": "x"}}
-	if err := ensureOnlyCharonChanged(original, provider); err != nil {
-		t.Errorf("changing only charon must be allowed, got %v", err)
+	// Updating only 1api is allowed.
+	provider["1api"] = map[string]any{"name": "1api", "options": map[string]any{"baseURL": "x"}}
+	if err := ensureOnlyManagedChanged(original, provider); err != nil {
+		t.Errorf("changing only 1api must be allowed, got %v", err)
 	}
 
 	// Editing the user's provider is refused.
 	edited := map[string]any{"myllm": map[string]any{"name": "hijacked"}}
-	if err := ensureOnlyCharonChanged(original, edited); err == nil {
+	if err := ensureOnlyManagedChanged(original, edited); err == nil {
 		t.Error("editing an original provider must be refused")
 	}
 
 	// Deleting the user's provider is refused.
-	deleted := map[string]any{"charon": map[string]any{"name": "charon"}}
-	if err := ensureOnlyCharonChanged(original, deleted); err == nil {
+	deleted := map[string]any{"1api": map[string]any{"name": "1api"}}
+	if err := ensureOnlyManagedChanged(original, deleted); err == nil {
 		t.Error("deleting an original provider must be refused")
 	}
 }
@@ -653,14 +653,14 @@ func TestPiDescribeAndApply(t *testing.T) {
 		t.Errorf("Describe info = %+v, want endpoint/key/api set", info)
 	}
 
-	extensionPath := filepath.Join(dir, "extensions", "charon.ts")
+	extensionPath := filepath.Join(dir, "extensions", "1api.ts")
 	data, err := os.ReadFile(extensionPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	cfg, ok := piParseExtension(data)
 	if !ok {
-		t.Fatal("could not parse charon.ts extension back out")
+		t.Fatal("could not parse 1api.ts extension back out")
 	}
 	if len(cfg.Models) != 2 {
 		t.Errorf("models = %v, want 2 entries", cfg.Models)
@@ -670,8 +670,8 @@ func TestPiDescribeAndApply(t *testing.T) {
 	var s map[string]any
 	sd, _ := os.ReadFile(settingsPath)
 	_ = json.Unmarshal(sd, &s)
-	if s["defaultProvider"] != "charon" || s["defaultModel"] != "x/y" {
-		t.Errorf("settings.json = %v, want defaultProvider/defaultModel set to charon/x/y", s)
+	if s["defaultProvider"] != "1api" || s["defaultModel"] != "x/y" {
+		t.Errorf("settings.json = %v, want defaultProvider/defaultModel set to 1api/x/y", s)
 	}
 
 	// A rename/key-rotation call without AllModels must preserve the previously
@@ -710,11 +710,11 @@ func TestOpenCodeApplyAuthWithJSONCComments(t *testing.T) {
 	writeFile(t, jsoncPath, `{
   "$schema": "https://opencode.ai/config.json",
   "theme": "manual-theme",
-  "model": "charon/old",
+  "model": "1api/old",
   "provider": {
-    "charon": {
+    "1api": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "charon",
+      "name": "1api",
       "options": {"baseURL": "https://old.example/v1", "apiKey": "sk-old"},
       "models": {"old": {"name": "old"}}
     }
@@ -722,7 +722,7 @@ func TestOpenCodeApplyAuthWithJSONCComments(t *testing.T) {
   "agent": {
     "compaction": {
       // OpenCode comment that breaks encoding/json
-      "model": "charon/low"
+      "model": "1api/low"
     }
   }
 }`)
@@ -750,12 +750,12 @@ func TestOpenCodeApplyAuthWithJSONCComments(t *testing.T) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		t.Fatalf("live file should be pure JSON after ApplyAuth: %v\n%s", err, data)
 	}
-	if cfg.Model != "charon/fresh" {
-		t.Errorf("model = %q, want charon/fresh", cfg.Model)
+	if cfg.Model != "1api/fresh" {
+		t.Errorf("model = %q, want 1api/fresh", cfg.Model)
 	}
-	p, ok := cfg.Provider["charon"]
+	p, ok := cfg.Provider["1api"]
 	if !ok {
-		t.Fatal("charon provider missing")
+		t.Fatal("1api provider missing")
 	}
 	if p.Options.BaseURL != "https://new.example/v1" || p.Options.APIKey != "sk-new" {
 		t.Errorf("provider options not overwritten: %#v", p.Options)
