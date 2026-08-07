@@ -3,6 +3,9 @@
 Primary host is **GitHub** (`devwork2454/1api`). Gitee is a **read mirror** for
 China network fallback (source + optional release assets).
 
+**Live mirror (this fork):** https://gitee.com/wbff/1api  
+(`GITEE_OWNER=wbff`, `GITEE_REPO=1api`; Secrets already set on GitHub.)
+
 ## 1. Create the Gitee repository
 
 1. Open https://gitee.com/ and sign in.
