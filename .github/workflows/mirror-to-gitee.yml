@@ -1,0 +1,65 @@
+# Mirror this repository (git history) to Gitee after pushes to main.
+# Requires repository secrets (Settings → Secrets and variables → Actions):
+#   GITEE_TOKEN  — Gitee private token with projects write scope
+#   GITEE_OWNER  — Gitee user/org (default: same as github.repository_owner if unset)
+#   GITEE_REPO   — Gitee repo name (default: 1api)
+#
+# Create an empty public/private repo on Gitee first (same name recommended).
+# Optional: also enable Gitee「仓库镜像」Pull from GitHub as a second channel:
+#   https://help.gitee.com/repository/settings/sync-between-gitee-github
+#
+# This workflow mirrors *git* (branches/tags). Release *binary* assets still
+# come from GitHub Releases; attach the same assets on Gitee if you want the
+# install.sh Gitee fallback to serve binaries.
+
+name: Mirror to Gitee
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: mirror-gitee
+  cancel-in-progress: true
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    # Skip silently when token is not configured (forks / first setup).
+    steps:
+      - name: Check secrets
+        id: check
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          if [ -z "$GITEE_TOKEN" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "GITEE_TOKEN not set; skip Gitee mirror (add secret to enable)."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.check.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push mirror to Gitee
+        if: steps.check.outputs.skip != 'true'
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_OWNER: ${{ secrets.GITEE_OWNER }}
+          GITEE_REPO: ${{ secrets.GITEE_REPO }}
+        run: |
+          set -euo pipefail
+          owner="${GITEE_OWNER:-${GITHUB_REPOSITORY_OWNER}}"
+          repo="${GITEE_REPO:-1api}"
+          # Prefer HTTPS + token (works without deploying deploy keys).
+          remote="https://oauth2:${GITEE_TOKEN}@gitee.com/${owner}/${repo}.git"
+          git remote remove gitee 2>/dev/null || true
+          git remote add gitee "$remote"
+          # Mirror all branches and tags that this checkout knows about.
+          git push --mirror gitee

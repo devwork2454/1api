@@ -4,16 +4,21 @@
 # Quick install (Linux & macOS, no Go required):
 #   curl -fsSL https://github.com/devwork2454/1api/releases/latest/download/install.sh | sh
 #
+# Download order: GitHub releases first; if that fails, fall back to Gitee
+# (code mirror / release assets). Override with REPO / GITEE_REPO / VERSION.
+#
 # Options (environment variables):
-#   REPO=owner/name     GitHub repo that hosts the release assets (default: this fork)
-#   PREFIX=/usr/local   install under <PREFIX>/bin instead of ~/.local (may need sudo)
-#   VERSION=v1.2.3      install a specific release instead of the latest
+#   REPO=owner/name       GitHub repo for release assets (default: devwork2454/1api)
+#   GITEE_REPO=owner/name Gitee mirror repo (default: same as REPO)
+#   PREFIX=/usr/local     install under <PREFIX>/bin instead of ~/.local (may need sudo)
+#   VERSION=v1.2.3        install a specific release instead of the latest
 #
 # Requires: curl (or wget), tar, and sha256sum or shasum.
 
 set -eu
 
 REPO="${REPO:-devwork2454/1api}"
+GITEE_REPO="${GITEE_REPO:-$REPO}"
 BINARY="1api"
 PREFIX="${PREFIX:-$HOME/.local}"
 BINDIR="$PREFIX/bin"
@@ -36,9 +41,12 @@ die()  { printf '\033[31merror:\033[0m %s\n' "$1" >&2; exit 1; }
 
 # --- pick a downloader -------------------------------------------------------
 if command -v curl >/dev/null 2>&1; then
-  dl() { curl -fSL "$1" -o "$2"; }
+  dl() { curl -fSL --connect-timeout 15 --max-time 300 "$1" -o "$2"; }
+  # Quiet body fetch for JSON helpers (stdout only).
+  http_get() { curl -fsSL --connect-timeout 10 --max-time 60 "$1"; }
 elif command -v wget >/dev/null 2>&1; then
-  dl() { wget -qO "$2" "$1"; }
+  dl() { wget -qO "$2" --timeout=300 "$1"; }
+  http_get() { wget -qO- --timeout=60 "$1"; }
 else
   die "need curl or wget to download 1api"
 fi
@@ -63,22 +71,73 @@ info "Detecting platform ... $os ($arch)"
 
 archive="${BINARY}_${os}_${arch}.tar.gz"
 
-# --- resolve the release URL -------------------------------------------------
-# GitHub redirects .../releases/latest/download/<asset> to the newest tag.
-if [ "$VERSION" = "latest" ]; then
-  base="https://github.com/$REPO/releases/latest/download"
-else
-  base="https://github.com/$REPO/releases/download/$VERSION"
-fi
+# github_release_base: CDN-style release download root for GitHub.
+github_release_base() {
+  if [ "$VERSION" = "latest" ]; then
+    printf 'https://github.com/%s/releases/latest/download' "$REPO"
+  else
+    printf 'https://github.com/%s/releases/download/%s' "$REPO" "$VERSION"
+  fi
+}
+
+# resolve_gitee_tag: Gitee has no reliable /latest/download redirect; pin a tag.
+# When VERSION=latest, read the newest release tag from Gitee API v5.
+resolve_gitee_tag() {
+  if [ "$VERSION" != "latest" ]; then
+    printf '%s' "$VERSION"
+    return 0
+  fi
+  owner=$(printf '%s' "$GITEE_REPO" | cut -d/ -f1)
+  name=$(printf '%s' "$GITEE_REPO" | cut -d/ -f2-)
+  # Prefer "tag_name":"v1.2.3" from /releases/latest JSON without requiring jq.
+  body=$(http_get "https://gitee.com/api/v5/repos/${owner}/${name}/releases/latest" 2>/dev/null) || return 1
+  tag=$(printf '%s' "$body" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
+  [ -n "$tag" ] || return 1
+  printf '%s' "$tag"
+}
+
+# gitee_release_base: release asset root for Gitee (requires a concrete tag).
+gitee_release_base() {
+  tag=$(resolve_gitee_tag) || return 1
+  printf 'https://gitee.com/%s/releases/download/%s' "$GITEE_REPO" "$tag"
+}
+
+# try_download SRC_LABEL BASE DEST — download DEST from BASE/basename(DEST).
+try_download() {
+  label=$1
+  base=$2
+  dest=$3
+  file=$(basename "$dest")
+  info "Trying $label: $base/$file"
+  if dl "$base/$file" "$dest"; then
+    return 0
+  fi
+  warn "$label download failed for $file"
+  rm -f "$dest"
+  return 1
+}
 
 tmp=$(mktemp -d 2>/dev/null || mktemp -d -t 1api)
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
 info "Downloading $archive ($VERSION) ..."
-dl "$base/$archive" "$tmp/$archive" || die "download failed — check the version/platform has a release asset"
+SOURCE=""
+if try_download "GitHub" "$(github_release_base)" "$tmp/$archive"; then
+  SOURCE=github
+  base=$(github_release_base)
+else
+  gitee_base=$(gitee_release_base) || die "GitHub failed and Gitee latest tag could not be resolved for $GITEE_REPO"
+  if try_download "Gitee" "$gitee_base" "$tmp/$archive"; then
+    SOURCE=gitee
+    base=$gitee_base
+  else
+    die "download failed on GitHub and Gitee — check that $REPO (and mirror $GITEE_REPO) have a release asset for this platform"
+  fi
+fi
+info "Using release mirror: $SOURCE"
 
 # --- verify the checksum (best effort; warn if the list is unavailable) ------
-if dl "$base/checksums.txt" "$tmp/checksums.txt" 2>/dev/null; then
+if try_download "$SOURCE checksums" "$base" "$tmp/checksums.txt" 2>/dev/null; then
   info "Verifying checksum ..."
   expected=$(grep " $archive\$" "$tmp/checksums.txt" | awk '{print $1}')
   [ -n "$expected" ] || die "no checksum listed for $archive"
