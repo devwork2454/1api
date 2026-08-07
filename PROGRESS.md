@@ -1,36 +1,36 @@
 # 项目进度
 
 ## GOAL
-为 charon 在配置 OpenCode 的 API provider/模型时，同步更新 oh-my-openagent（OMO）的 agents/categories 模型；未安装 OMO 则跳过。
+修复 charon 配置 Codex 自定义 API 后启动告警：`codex_apps` MCP 401（ChatGPT token）与自定义模型 `Model metadata … not found`。
 
 ### 验收标准
-- [x] `charon add/edit opencode`（ApplyAuth）在存在 `~/.omo/omo.jsonc` 时，将 `[opencode].agents` / `categories` 的 `model` 写成与 OpenCode tier 一致的 `charon/<id>`
-- [x] `charon switch opencode <profile>` 恢复 OpenCode 后同样同步 OMO（若已安装）
-- [x] 无 `~/.omo/omo.jsonc|omo.json` 时 ApplyAuth/switch 不报错、不创建 OMO 文件
-- [x] 仅改 `model` 字段，保留 skills/prompt_append 等其它键
+- [x] `charon` ApplyAuth（codex）写入 `model_catalog_json` + `~/.codex/charon-model-catalog.json`，slug 与 `model` 一致
+- [x] ApplyAuth / switch 后对自定义 provider 设置 `features.apps = false`，避免 `codex_apps` 用失效 ChatGPT token 握手
+- [x] UseOfficialAuth / 切回非 charon provider 时清除 `model_catalog_json`，并去掉 charon 写入的 `features.apps`
+- [x] 仅改 charon 相关键；保留用户 `[features].code_mode` 等其它设置
 - [x] `bash .harness/verify.sh` 退出 0
+- [x] 多维评估无 Critical/Major
 
 ### 代定决策
-- OMO 检测：仅看 `$HOME/.omo/omo.jsonc` 或 `omo.json` 是否存在
-- 模型写入：`charon/<resolved-tier-id>`（与 OpenCode tier routing 同一套 mid/low/high）
-- 覆盖策略：重写 agents/categories 下全部 `model`；其它键不动
-- 配置节：优先 `[opencode]`，否则顶层 `agents`/`categories`
-- 不把 OMO 纳入 profile Artifacts；通过 `Tool.AfterLiveChange` 在 switch/undo 后同步
-- verify.sh 增强：追加 OMO 相关测试 `-run` 过滤（只增强不弱化）
-- 一并纳入：`--key-env` 与 `models/` 前缀规范化
+- 根因拆分：① `codex_apps` 走 ChatGPT OAuth（与自定义 Bearer 无关）；② 自定义 slug 不在 Codex 内置目录 → fallback metadata
+- 目录文件固定路径：`$HOME/.codex/charon-model-catalog.json`（0600）
+- catalog 含 active model + `AllModels`（若有）；字段用 Codex MVP schema + `context_window`（Claude 200K，其它 128K）+ `apply_patch_tool_type=freeform`
+- `features.apps=false` 仅在 `model_provider=charon` 时写入；不把整个 `features` 纳入 profile ownedKeys
+- `model_catalog_json` 纳入 MergedTOML ownedKeys，便于 switch 正确增删
+- AfterLiveChange：按 live `model_provider` 同步 catalog / apps（覆盖 switch/undo）
+- verify.sh：追加 Codex catalog/apps 相关 `-run` 过滤（只增强）
 
 ## 已完成
-- `internal/tools/omo.go` + 单测；OpenCode ApplyAuth / AfterLiveChange 挂钩
-- `internal/profile/apply.go` 调用 AfterLiveChange
-- AGENTS.md 注明可选写入 `~/.omo/omo.jsonc`
-- `bash .harness/verify.sh` 通过
+- `internal/tools/codex_catalog.go` + ApplyAuth/UseOfficialAuth/AfterLiveChange 挂钩
+- 单测 `TestCodexApplyAuthWritesModelCatalogAndDisablesApps` / `TestCodexAfterLiveChangeSyncsCompanion`
+- live `~/.codex` 已同步；smoke：无 MCP/metadata 告警，模型可回复
+- `bash .harness/verify.sh` 通过；EVAL 无 Critical/Major
 
 ## 进行中
 （无）
 
 ## 未开始 / 已知问题
-- 未改真实 `$HOME` 下的 omo（开发规范）；用户侧需再跑一次 `charon switch/add opencode …` 才会刷新实机 OMO
-- 仓库内 `.omo/` 归档笔记、`CLAUDE.md` 为本地文件，未纳入本提交
+- `auth.json` ChatGPT refresh token 仍 invalidated；若要用官方 Apps 需 `codex login`。自定义 API 推理不受影响，但 Codex 可能仍打 refresh 失败日志。
 
 ## 阻塞
 （无）

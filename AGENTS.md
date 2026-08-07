@@ -15,6 +15,11 @@ When configuring OpenCode, charon may also rewrite **only** `model` fields under
 `~/.omo/omo.jsonc` (oh-my-openagent agents/categories) to `charon/<tier>`; if
 that file is absent, OMO sync is skipped (not an error, not created).
 
+When configuring Codex with a custom API provider, charon also writes
+`~/.codex/charon-model-catalog.json` and sets `model_catalog_json` (so custom
+slugs have metadata), and sets `features.apps = false` (Apps/`codex_apps` use
+ChatGPT OAuth in `auth.json`, not the custom Bearer token).
+
 - **Never** run `charon add`, `charon switch`, `charon save`, or the interactive menu
   against your real `$HOME` while developing. Always sandbox:
   ```sh

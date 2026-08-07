@@ -188,6 +188,147 @@ func TestCodexKeepsUserProvider(t *testing.T) {
 	}
 }
 
+func TestCodexApplyAuthWritesModelCatalogAndDisablesApps(t *testing.T) {
+	home := sandboxHome(t)
+	writeFile(t, filepath.Join(home, ".codex", "config.toml"), `
+[features.code_mode]
+direct_only_tool_namespaces = ["mcp__fastctx"]
+`)
+
+	c := Find("codex")
+	if err := c.ApplyAuth(AuthSpec{
+		Endpoint:  "https://gw/v1",
+		Key:       "sk-k123456789",
+		Model:     "deepseek-v4-flash-0731",
+		AllModels: []string{"deepseek-v4-flash-0731", "other-model"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var cfg struct {
+		Model            string `toml:"model"`
+		ModelCatalogJSON string `toml:"model_catalog_json"`
+		Features         struct {
+			Apps     *bool `toml:"apps"`
+			CodeMode struct {
+				Namespaces []string `toml:"direct_only_tool_namespaces"`
+			} `toml:"code_mode"`
+		} `toml:"features"`
+	}
+	data, err := os.ReadFile(filepath.Join(home, ".codex", "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := toml.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	wantCatalog := filepath.Join(home, ".codex", "charon-model-catalog.json")
+	if cfg.ModelCatalogJSON != wantCatalog {
+		t.Errorf("model_catalog_json = %q, want %q", cfg.ModelCatalogJSON, wantCatalog)
+	}
+	if cfg.Features.Apps == nil || *cfg.Features.Apps {
+		t.Errorf("features.apps = %v, want false", cfg.Features.Apps)
+	}
+	if len(cfg.Features.CodeMode.Namespaces) != 1 || cfg.Features.CodeMode.Namespaces[0] != "mcp__fastctx" {
+		t.Errorf("features.code_mode must survive ApplyAuth, got %#v", cfg.Features.CodeMode)
+	}
+
+	catData, err := os.ReadFile(wantCatalog)
+	if err != nil {
+		t.Fatalf("catalog file missing: %v", err)
+	}
+	var cat struct {
+		Models []struct {
+			Slug string `json:"slug"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal(catData, &cat); err != nil {
+		t.Fatal(err)
+	}
+	if len(cat.Models) != 2 {
+		t.Fatalf("catalog models = %d, want 2", len(cat.Models))
+	}
+	if cat.Models[0].Slug != "deepseek-v4-flash-0731" {
+		t.Errorf("first catalog slug = %q, want active model", cat.Models[0].Slug)
+	}
+
+	if err := c.UseOfficialAuth(); err != nil {
+		t.Fatal(err)
+	}
+	data, _ = os.ReadFile(filepath.Join(home, ".codex", "config.toml"))
+	var after struct {
+		ModelProvider    *string `toml:"model_provider"`
+		ModelCatalogJSON *string `toml:"model_catalog_json"`
+		Features         struct {
+			Apps     *bool `toml:"apps"`
+			CodeMode *struct {
+				Namespaces []string `toml:"direct_only_tool_namespaces"`
+			} `toml:"code_mode"`
+		} `toml:"features"`
+	}
+	if err := toml.Unmarshal(data, &after); err != nil {
+		t.Fatal(err)
+	}
+	if after.ModelCatalogJSON != nil {
+		t.Errorf("UseOfficialAuth left model_catalog_json = %q", *after.ModelCatalogJSON)
+	}
+	if after.ModelProvider != nil {
+		t.Errorf("UseOfficialAuth left model_provider = %q", *after.ModelProvider)
+	}
+	if after.Features.Apps != nil {
+		t.Errorf("UseOfficialAuth left features.apps = %v", *after.Features.Apps)
+	}
+	if after.Features.CodeMode == nil || len(after.Features.CodeMode.Namespaces) != 1 {
+		t.Errorf("UseOfficialAuth must keep features.code_mode, got %#v", after.Features.CodeMode)
+	}
+}
+
+func TestCodexAfterLiveChangeSyncsCompanion(t *testing.T) {
+	home := sandboxHome(t)
+	writeFile(t, filepath.Join(home, ".codex", "config.toml"), `
+model = "custom-slug"
+model_provider = "charon"
+
+[model_providers.charon]
+name = "charon"
+base_url = "https://gw/v1"
+experimental_bearer_token = "sk-k123456789"
+wire_api = "responses"
+`)
+
+	c := Find("codex")
+	if c.AfterLiveChange == nil {
+		t.Fatal("codex AfterLiveChange must be set")
+	}
+	if err := c.AfterLiveChange(); err != nil {
+		t.Fatal(err)
+	}
+
+	var cfg struct {
+		ModelCatalogJSON string `toml:"model_catalog_json"`
+		Features         struct {
+			Apps *bool `toml:"apps"`
+		} `toml:"features"`
+	}
+	data, _ := os.ReadFile(filepath.Join(home, ".codex", "config.toml"))
+	if err := toml.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ModelCatalogJSON == "" {
+		t.Fatal("AfterLiveChange should set model_catalog_json for charon provider")
+	}
+	if cfg.Features.Apps == nil || *cfg.Features.Apps {
+		t.Fatal("AfterLiveChange should set features.apps=false for charon provider")
+	}
+	catData, err := os.ReadFile(cfg.ModelCatalogJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(catData), `"slug": "custom-slug"`) && !strings.Contains(string(catData), `"slug":"custom-slug"`) {
+		t.Errorf("catalog missing custom-slug: %s", catData)
+	}
+}
+
 func TestClaudeDescribeAndApply(t *testing.T) {
 	home := sandboxHome(t)
 	writeFile(t, filepath.Join(home, ".claude", "settings.json"), `{"theme":"dark"}`)

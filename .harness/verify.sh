@@ -16,6 +16,10 @@ echo "==> OMO companion sync tests"
 go test -race ./internal/tools/ ./internal/profile/ -count=1 \
   -run 'TestOpenCodeApplyAuthSyncsOMO|TestOpenCodeApplyAuthSkipsMissingOMO|TestSyncOMOFromOpenCodeLive|TestOpenCodeSwitchSyncsOMO'
 
+echo "==> Codex companion sync tests (catalog + apps)"
+go test -race ./internal/tools/ -count=1 \
+  -run 'TestCodexApplyAuthWritesModelCatalogAndDisablesApps|TestCodexAfterLiveChangeSyncsCompanion'
+
 echo "==> build"
 go build -trimpath -o /tmp/charon-verify ./cmd/charon
 

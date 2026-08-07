@@ -40,11 +40,17 @@ func newCodex() *Tool {
 			// Other config.toml settings (sandbox mode, approval policy, ...) are CLI
 			// preferences, not per-profile auth — preserved live. model and
 			// model_reasoning_effort switch with the profile, matching Claude Code.
+			// model_catalog_json is owned so switch/undo adds or drops the custom
+			// catalog pointer with the profile; features.apps is live-only (see
+			// AfterLiveChange) so user feature tables are never snapshotted.
 			artifact.NewMergedTOMLFile("config.toml", configPath, 0o600,
-				"model", "model_context_window", "model_provider", "model_providers", "model_reasoning_effort").
+				"model", "model_context_window", "model_provider", "model_providers", "model_reasoning_effort", "model_catalog_json").
 				WithDisplay("model", "model_reasoning_effort"),
 			artifact.NewRotatingFile("auth.json", authPath, 0o600), // ChatGPT OAuth tokens; Codex refreshes them in place
 		},
+		// After switch/undo, regenerate the custom catalog and keep Apps off while
+		// model_provider=charon (Apps MCP uses ChatGPT OAuth, not the API key).
+		AfterLiveChange: syncCodexCompanionFromLive,
 		ApplyAuth: func(a AuthSpec) error {
 			// Register a self-contained OpenAI-compatible provider (key embedded inline)
 			// and point Codex at it; auth.json (ChatGPT OAuth) is left untouched.
@@ -74,6 +80,22 @@ func newCodex() *Tool {
 			if err := ensureOnlyCharonChanged(original, providers); err != nil {
 				return err
 			}
+			model := a.Model
+			if model == "" {
+				model, _ = cfg["model"].(string)
+			}
+			if ids := collectCodexCatalogIDs(model, a.AllModels); len(ids) > 0 {
+				catalogPath, err := writeCodexModelCatalog(ids)
+				if err != nil {
+					return err
+				}
+				cfg["model_catalog_json"] = catalogPath
+			} else {
+				delete(cfg, "model_catalog_json")
+			}
+			// Built-in Apps (codex_apps) authenticate with ChatGPT OAuth in auth.json.
+			// Custom API routing leaves that token unused/stale → HTTP 401 on startup.
+			setCodexAppsEnabled(cfg, false)
 			return writeTOMLMap(configPath, cfg, 0o600)
 		},
 		OfficialOAuth: func() bool {
@@ -94,6 +116,8 @@ func newCodex() *Tool {
 			}
 			delete(cfg, "model_provider")
 			delete(cfg, "model_context_window")
+			delete(cfg, "model_catalog_json")
+			setCodexAppsEnabled(cfg, true)
 			return writeTOMLMap(configPath, cfg, 0o600)
 		},
 		OAuthFingerprint: func() string {
