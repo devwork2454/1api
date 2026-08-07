@@ -30,6 +30,19 @@ func TestUpdateInstallURLOverride(t *testing.T) {
 	}
 }
 
+func TestGiteeInstallFetchScript(t *testing.T) {
+	s := giteeInstallFetchScript()
+	if !strings.Contains(s, "gitee.com/api/v5/repos/wbff/1api/releases/latest") {
+		t.Errorf("script missing Gitee releases API: %q", s)
+	}
+	if !strings.Contains(s, "gitee.com/wbff/1api/releases/download") {
+		t.Errorf("script missing Gitee download base: %q", s)
+	}
+	if !strings.Contains(s, "install.sh") {
+		t.Errorf("script missing install.sh: %q", s)
+	}
+}
+
 func TestShellQuote(t *testing.T) {
 	if got := shellQuote("https://x/y"); got != "'https://x/y'" {
 		t.Errorf("got %q", got)

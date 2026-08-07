@@ -18,7 +18,8 @@
 set -eu
 
 REPO="${REPO:-devwork2454/1api}"
-GITEE_REPO="${GITEE_REPO:-$REPO}"
+# Gitee path may differ from GitHub owner (this fork: wbff/1api).
+GITEE_REPO="${GITEE_REPO:-wbff/1api}"
 BINARY="1api"
 PREFIX="${PREFIX:-$HOME/.local}"
 BINDIR="$PREFIX/bin"

@@ -501,12 +501,15 @@ func cmdUninstall() error {
 	return nil
 }
 
-// defaultUpdateInstallURL is this fork's release install script. Upstream
-// mingtheanlay/1api is intentionally not used so `1api update` matches the
-// binary built from this repository's releases.
-const defaultUpdateInstallURL = "https://github.com/devwork2454/1api/releases/latest/download/install.sh"
+const (
+	defaultUpdateInstallURL = "https://github.com/devwork2454/1api/releases/latest/download/install.sh"
+	// Gitee has no stable /latest/download redirect; resolve tag via API first.
+	giteeOwnerRepo       = "wbff/1api"
+	giteeReleasesAPI     = "https://gitee.com/api/v5/repos/" + giteeOwnerRepo + "/releases/latest"
+	giteeReleaseDownload = "https://gitee.com/" + giteeOwnerRepo + "/releases/download"
+)
 
-// updateInstallURL returns the install.sh URL used by `1api update`.
+// updateInstallURL returns the primary install.sh URL for `1api update`.
 // Override with CHARON_UPDATE_URL for mirrors or local testing.
 func updateInstallURL() string {
 	if u := strings.TrimSpace(os.Getenv("CHARON_UPDATE_URL")); u != "" {
@@ -515,17 +518,46 @@ func updateInstallURL() string {
 	return defaultUpdateInstallURL
 }
 
-// cmdUpdate runs the online install.sh script to upgrade the binary from this
-// fork's GitHub releases (or CHARON_UPDATE_URL when set).
+// giteeInstallFetchScript is a POSIX fragment: resolve latest Gitee release tag
+// and curl that tag's install.sh. Gitee does not reliably support GitHub-style
+// .../releases/latest/download/install.sh.
+func giteeInstallFetchScript() string {
+	// sed extracts "tag_name":"v…" without jq; fails closed if missing.
+	return `tag=$(curl -fsSL ` + shellQuote(giteeReleasesAPI) + ` | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1) && ` +
+		`test -n "$tag" && curl -fsSL ` + shellQuote(giteeReleaseDownload) + `/"$tag"/install.sh`
+}
+
+// cmdUpdate upgrades the binary via online install.sh: GitHub first, then Gitee.
 func cmdUpdate() error {
-	url := updateInstallURL()
-	fmt.Printf("Checking for updates and upgrading 1api from\n  %s\n", url)
-	// #nosec G204 -- URL is either our constant or an explicit operator override.
-	cmd := exec.Command("sh", "-c", "curl -fsSL "+shellQuote(url)+" | sh")
+	if u := strings.TrimSpace(os.Getenv("CHARON_UPDATE_URL")); u != "" {
+		fmt.Printf("Checking for updates and upgrading 1api from\n  %s\n", u)
+		// #nosec G204 -- explicit operator override.
+		cmd := exec.Command("sh", "-c", "curl -fsSL "+shellQuote(u)+" | sh")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("update failed: %w", err)
+		}
+		return nil
+	}
+
+	fmt.Printf("Checking for updates and upgrading 1api from\n  %s\n", defaultUpdateInstallURL)
+	// #nosec G204 -- fixed GitHub release URL.
+	cmd := exec.Command("sh", "-c", "curl -fsSL "+shellQuote(defaultUpdateInstallURL)+" | sh")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err == nil {
+		return nil
+	} else {
+		fmt.Printf("GitHub update failed: %v\nTrying Gitee mirror %s …\n", err, giteeOwnerRepo)
+	}
+
+	// #nosec G204 -- fixed Gitee API + release download hosts.
+	cmd = exec.Command("sh", "-c", giteeInstallFetchScript()+" | sh")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("update failed: %w", err)
+		return fmt.Errorf("update failed on GitHub and Gitee: %w", err)
 	}
 	return nil
 }

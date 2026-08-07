@@ -40,34 +40,33 @@ https://help.gitee.com/repository/settings/sync-between-gitee-github
 
 可与 Actions 二选一或并存；**只写 GitHub，Gitee 只读**，避免双向乱推。
 
-## 4. Release 二进制（install.sh 回退）
+## 4. Release 二进制（install.sh / `1api update` 回退）
 
-`scripts/install.sh` 下载顺序：
+`scripts/install.sh` 与 `1api update` 顺序：
 
-1. **GitHub** `releases/latest`（或 `VERSION=`）
-2. 失败则 **Gitee** 同名仓库的 release 附件
+1. **GitHub** `devwork2454/1api` releases
+2. 失败则 **Gitee** `wbff/1api` 同 tag 附件
 
-因此 Gitee 上除了 git 镜像外，若要让国内安装脚本也能下二进制，需要在
-Gitee **发行版**里挂上与 GitHub 相同的：
+需要两边都有同名资产：
 
-- `1api_linux_amd64.tar.gz` 等
+- `1api_{linux,darwin}_{amd64,arm64}.tar.gz`
 - `checksums.txt`
-- `install.sh`（可选）
+- `install.sh`
 
-可用手动上传，或另加 workflow 在 GitHub Release 发布后同步附件（未内置）。
+打 tag `v*` 会触发 GitHub Actions GoReleaser；再用仓库脚本/手动把资产同步到 Gitee 发行版（git mirror **不会**带附件）。
 
 ## 5. 安装命令
 
-仍推荐：
-
 ```sh
+# 首选（脚本内自动 GitHub → Gitee）
 curl -fsSL https://github.com/devwork2454/1api/releases/latest/download/install.sh | sh
+
+# 强制只走 Gitee 资产（GitHub 全挂时）
+GITEE_REPO=wbff/1api VERSION=v1.5.5-devwork1 sh -c \
+  'curl -fsSL "https://gitee.com/wbff/1api/releases/download/${VERSION}/install.sh" | sh'
+
+# 源码
+git clone https://gitee.com/wbff/1api.git && cd 1api && make install
 ```
 
-脚本内部会先 GitHub 再 Gitee。环境变量：
-
-```sh
-REPO=devwork2454/1api
-GITEE_REPO=<gitee用户>/1api   # 若 Gitee 路径不同
-VERSION=v1.2.3
-```
+环境变量：`REPO`、`GITEE_REPO`（默认 `wbff/1api`）、`VERSION`。

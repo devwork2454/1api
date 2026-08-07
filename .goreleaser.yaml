@@ -3,6 +3,9 @@
 # Docs: https://goreleaser.com
 version: 2
 
+# Directory is still named "charon"; force archive names to 1api_* for install.sh.
+project_name: 1api
+
 before:
   hooks:
     - go mod tidy
