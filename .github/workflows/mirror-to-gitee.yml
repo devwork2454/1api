@@ -61,5 +61,9 @@ jobs:
           remote="https://oauth2:${GITEE_TOKEN}@gitee.com/${owner}/${repo}.git"
           git remote remove gitee 2>/dev/null || true
           git remote add gitee "$remote"
-          # Mirror all branches and tags that this checkout knows about.
-          git push --mirror gitee
+          # Push only real heads/tags. Do NOT use --mirror: checkout also has
+          # remote-tracking refs (origin/*) that Gitee rejects as hidden refs.
+          git push gitee --prune 'refs/remotes/origin/*:refs/heads/*' 2>/dev/null || true
+          # Prefer local branch tips after fetch-depth:0 checkout.
+          git push gitee --all
+          git push gitee --tags
