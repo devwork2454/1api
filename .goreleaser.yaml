@@ -1,4 +1,4 @@
-# GoReleaser config for charon — builds cross-platform binaries, cuts a GitHub
+# GoReleaser config for 1api — builds cross-platform binaries, cuts a GitHub
 # release, and publishes a Homebrew cask to your tap.
 # Docs: https://goreleaser.com
 version: 2
@@ -8,14 +8,14 @@ before:
     - go mod tidy
     # Generate shell completions from the CLI itself, bundled into each archive.
     - mkdir -p completions
-    - sh -c 'go run ./cmd/charon completion bash > completions/charon.bash'
-    - sh -c 'go run ./cmd/charon completion zsh  > completions/charon.zsh'
-    - sh -c 'go run ./cmd/charon completion fish > completions/charon.fish'
+    - sh -c 'go run ./cmd/1api completion bash > completions/1api.bash'
+    - sh -c 'go run ./cmd/1api completion zsh  > completions/1api.zsh'
+    - sh -c 'go run ./cmd/1api completion fish > completions/1api.fish'
 
 builds:
-  - id: charon
-    main: ./cmd/charon
-    binary: charon
+  - id: 1api
+    main: ./cmd/1api
+    binary: 1api
     env:
       - CGO_ENABLED=0
     flags:
@@ -30,7 +30,7 @@ builds:
       - -s -w -X main.version={{.Version}}
 
 archives:
-  - id: charon
+  - id: 1api
     formats: [tar.gz]
     name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
     files:
@@ -47,7 +47,7 @@ checksum:
 release:
   github:
     owner: devwork2454
-    name: charon
+    name: 1api
   # Attach the curl installer to each release so it can be fetched from the
   # release CDN (github.com/.../releases/latest/download/install.sh) instead of
   # raw.githubusercontent.com, which rate-limits (HTTP 429) by client IP.

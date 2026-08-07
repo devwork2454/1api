@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
-# install.sh — download a prebuilt charon binary and put it on your PATH.
+# install.sh — download a prebuilt 1api binary and put it on your PATH.
 #
 # Quick install (Linux & macOS, no Go required):
-#   curl -fsSL https://github.com/devwork2454/charon/releases/latest/download/install.sh | sh
+#   curl -fsSL https://github.com/devwork2454/1api/releases/latest/download/install.sh | sh
 #
 # Options (environment variables):
 #   REPO=owner/name     GitHub repo that hosts the release assets (default: this fork)
@@ -13,8 +13,8 @@
 
 set -eu
 
-REPO="${REPO:-devwork2454/charon}"
-BINARY="charon"
+REPO="${REPO:-devwork2454/1api}"
+BINARY="1api"
 PREFIX="${PREFIX:-$HOME/.local}"
 BINDIR="$PREFIX/bin"
 VERSION="${VERSION:-latest}"
@@ -40,7 +40,7 @@ if command -v curl >/dev/null 2>&1; then
 elif command -v wget >/dev/null 2>&1; then
   dl() { wget -qO "$2" "$1"; }
 else
-  die "need curl or wget to download charon"
+  die "need curl or wget to download 1api"
 fi
 command -v tar >/dev/null 2>&1 || die "tar is required"
 
@@ -71,7 +71,7 @@ else
   base="https://github.com/$REPO/releases/download/$VERSION"
 fi
 
-tmp=$(mktemp -d 2>/dev/null || mktemp -d -t charon)
+tmp=$(mktemp -d 2>/dev/null || mktemp -d -t 1api)
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
 info "Downloading $archive ($VERSION) ..."

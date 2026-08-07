@@ -1,6 +1,6 @@
-# charon — build & install
-BINARY  := charon
-PKG     := ./cmd/charon
+# 1api — build & install
+BINARY  := 1api
+PKG     := ./cmd/1api
 # Version from git tag if available, else "dev".
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
@@ -9,7 +9,7 @@ PREFIX  ?= $(HOME)/.local
 
 .PHONY: build install uninstall test cover lint fmt tidy clean run
 
-build: ## Build ./charon for the current platform
+build: ## Build ./1api for the current platform
 	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) $(PKG)
 
 install: ## Build and install to $(PREFIX)/bin

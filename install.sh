@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# install.sh — build charon from source and install it onto your PATH.
+# install.sh — build 1api from source and install it onto your PATH.
 #
 # Usage:
 #   ./install.sh                 # install to ~/.local/bin (no sudo)
@@ -9,8 +9,8 @@
 
 set -eu
 
-BINARY="charon"
-PKG="./cmd/charon"
+BINARY="1api"
+PKG="./cmd/1api"
 MIN_GO_MINOR=24
 PREFIX="${PREFIX:-$HOME/.local}"
 BINDIR="$PREFIX/bin"
