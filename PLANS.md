@@ -5,6 +5,12 @@ Candidate features, ranked by value vs. effort. These lean on the existing
 
 ## High value, low effort
 
+### OpenCode oh-my omo.jsonc model sync ✅ (done)
+`add`/`edit`/`switch`/`undo`/`run` for OpenCode derive-patch `~/.omo/omo.jsonc`
+agent/category `model` fields from live mid/low/high routing (`1api/*` or legacy
+`charon/*` only). Missing omo is a no-op; omo is not a profile Artifact. See
+README “OpenCode + oh-my-openagent” and `internal/tools/opencode_omo.go`.
+
 ### Account-named backups ✅ (done)
 `charon save <tool>` with no name snapshots the current OAuth login and names the
 profile after its account (Codex `id_token` email, Claude `~/.claude.json`), so a

@@ -33,15 +33,19 @@ switching away and back is always clean and reversible.
   auto-captured `default` profile means you can always revert.
 - **Non-destructive.** Charon only ever touches its own `1api` provider entry
   in each tool's config, never your hand-authored providers.
+- **OpenCode + oh-my.** When you add/edit/switch/run an OpenCode profile, Charon
+  also realigns `~/.omo/omo.jsonc` agent/category `model` fields to the same
+  mid/low/high routing (only `1api/*` and legacy `charon/*` refs). Missing omo is
+  a silent no-op.
 
 ## Supported tools
 
-| Tool | Endpoint | Credentials |
-|------|----------|-------------|
-| **Codex** | `~/.codex/config.toml` (`model_provider` → `base_url`) | `~/.codex/auth.json` |
-| **Claude Code** | `~/.claude/settings.json` (`env.ANTHROPIC_BASE_URL`) | `settings.json` env key **or** macOS Keychain `Claude Code-credentials` |
-| **OpenCode** | `~/.config/opencode/opencode.json` (`provider.*.options.baseURL`) | `~/.local/share/opencode/auth.json` |
-| **Pi** | `~/.pi/agent/extensions/1api.ts` (`pi.registerProvider("1api", ...)`) | `~/.pi/agent/auth.json` |
+| Tool | Endpoint | Credentials | Extra |
+|------|----------|-------------|-------|
+| **Codex** | `~/.codex/config.toml` (`model_provider` → `base_url`) | `~/.codex/auth.json` | — |
+| **Claude Code** | `~/.claude/settings.json` (`env.ANTHROPIC_BASE_URL`) | `settings.json` env key **or** macOS Keychain `Claude Code-credentials` | — |
+| **OpenCode** | `~/.config/opencode/opencode.json(c)` (`provider.*.options.baseURL`) | `~/.local/share/opencode/auth.json` | Derive-patches `~/.omo/omo.jsonc` models (see below) |
+| **Pi** | `~/.pi/agent/extensions/1api.ts` (`pi.registerProvider("1api", ...)`) | `~/.pi/agent/auth.json` | — |
 
 ## Supported platforms
 
@@ -216,6 +220,40 @@ different endpoint/key, `1api save codex proxy`; then hop between them with
 `1api switch codex work-key` — or just run `1api` and pick from the menu.
 `restore` always returns to the pristine config captured the first time Charon ran.
 
+### OpenCode + oh-my-openagent (`omo.jsonc`)
+
+If you use [oh-my-openagent](https://github.com/code-yeongyu/oh-my-openagent),
+sub-agent models live in `~/.omo/omo.jsonc` under `"[opencode]".agents` /
+`categories`, not only in `opencode.jsonc`. Charon keeps those in step when
+OpenCode profiles change:
+
+| Command | What happens to omo |
+|---------|---------------------|
+| `1api add opencode` / `edit` | After writing OpenCode config, rewrite managed omo `model` fields |
+| `1api switch` / `undo` / `restore` | After restoring the profile snapshot, re-derive omo from live OpenCode config |
+| `1api run opencode <profile>` | Seed host omo into the temp HOME (if present), then patch models for the sandbox |
+
+**Rules (by design):**
+
+- **Source of truth** is the live OpenCode config (`model` / `small_model` /
+  managed `provider.1api` or legacy `provider.charon` model map). omo is
+  *derived*, not snapshotted into profiles.
+- Only `model` strings that are empty, `1api/…`, or legacy `charon/…` are
+  rewritten. Foreign refs (e.g. `openai/gpt-4`) and non-model keys
+  (`description`, `skills`, `prompt_append`, …) are left alone.
+- Agents/categories are mapped to mid/low/high the same way OpenCode agent
+  routing is (e.g. `explore`/`librarian`/`quick` → low; `sisyphus`/`oracle`/
+  `deep` → high; default mid). A single-model endpoint fills all three tiers.
+- If `~/.omo/omo.jsonc` does not exist, Charon does **nothing** (does not
+  install or create oh-my).
+- Rewrites use indented JSON (same as OpenCode config writes); JSONC comments
+  in omo may be dropped.
+
+```sh
+1api switch opencode aliyun   # opencode.jsonc + omo models follow aliyun
+1api switch opencode grok-api # both follow grok-api again
+```
+
 ## How it works
 
 - **Storage:** `~/.config/1api/` (`$XDG_CONFIG_HOME` respected).
@@ -228,6 +266,8 @@ different endpoint/key, `1api save codex proxy`; then hop between them with
   so reverting is always possible and it is never overwritten.
 - Writes are **atomic** (temp file → `rename`), and credential files/dirs are
   mode `0600`/`0700`.
+- **OpenCode omo:** not stored under `~/.config/1api/`; patched in place at
+  `~/.omo/omo.jsonc` after apply/switch/run (see above).
 
 ## Security
 
@@ -238,12 +278,14 @@ version may push secrets back into the Keychain instead.
 ## Project layout
 
 ```
-cmd/1api/          entrypoint + subcommands
+cmd/1api/            entrypoint + subcommands
 internal/artifact/   snapshot/restore primitives (Artifact interface + implementations)
-internal/tools/      per-tool adapters (codex, claude, opencode, pi)
-internal/profile/    snapshot store (split by concern: snapshot, apply, backup, manage)
+internal/tools/      per-tool adapters (codex, claude, opencode + tiers/omo, pi)
+internal/profile/    snapshot store (split by concern: snapshot, apply, backup, manage, session)
 internal/tui/        bubbletea interactive menu
 internal/secret/     masking + macOS keychain access
+internal/models/     provider model-list fetch
+internal/jsonc/      JSON-with-comments decode for OpenCode/omo configs
 ```
 
 ## Development

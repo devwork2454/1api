@@ -1,21 +1,22 @@
 # AGENTS.md
 
 Guidance for AI coding agents (and humans) working in this repository.
-`charon` is a small Go CLI that detects the Codex, Claude Code, OpenCode, and Pi
-CLIs and switches each one's **endpoint + credentials** between named profiles.
+`1api` (module/binary; historically “charon”) is a small Go CLI that detects the
+Codex, Claude Code, OpenCode, and Pi CLIs and switches each one's
+**endpoint + credentials** between named profiles.
 
 ## Golden rule: this tool edits real user credentials
 
-`charon` reads and writes live config for other tools (`~/.codex`, `~/.claude`,
-`~/.config/opencode`, `~/.local/share/opencode`, `~/.pi/agent`) and the macOS
-Keychain. It also
+`1api` reads and writes live config for other tools (`~/.codex`, `~/.claude`,
+`~/.config/opencode`, `~/.local/share/opencode`, `~/.pi/agent`, and for OpenCode
+also `~/.omo/omo.jsonc` model fields) and the macOS Keychain. It also
 **reads** `~/.claude.json` (`oauthAccount.emailAddress`) solely to name an
 account-backup profile — that file is never written or snapshotted.
 
-- **Never** run `charon add`, `charon switch`, `charon save`, or the interactive menu
+- **Never** run `1api add`, `1api switch`, `1api save`, or the interactive menu
   against your real `$HOME` while developing. Always sandbox:
   ```sh
-  HOME=$(mktemp -d) go run ./cmd/charon status
+  HOME=$(mktemp -d) go run ./cmd/1api status
   ```
 - Tests must never touch real config. Use `t.Setenv("HOME", t.TempDir())` and
   `t.Setenv("XDG_CONFIG_HOME", t.TempDir())`. See `internal/tools/tools_test.go`
@@ -31,10 +32,31 @@ account-backup profile — that file is never written or snapshotted.
   in tests against a real HOME; sandbox `$HOME` and optional fixture under
   `$HOME/.omo/omo.jsonc` when covering this path.
 
+### OpenCode omo sync (do not regress)
+
+Implementation: `internal/tools/opencode_omo.go` (`SyncOpenCodeOmo` /
+`SyncOpenCodeOmoAt` / `SeedAndSyncOpenCodeOmoAt`), tier map in
+`opencode_tiers.go`, hooks in `opencode.go` `ApplyAuth`, `profile/apply.go`
+`switchTo`, `profile/session.go` `MaterializeSession`.
+
+| Invariant | Detail |
+|-----------|--------|
+| Path | `$HOME/.omo/omo.jsonc` only (via `home()`); not an Artifact under `~/.config/1api` |
+| Trigger | After successful OpenCode `ApplyAuth`; after OpenCode `switchTo` restore; after `MaterializeSession` for opencode |
+| Missing file | Return nil — never create or install oh-my |
+| Rewrite set | Only empty / `1api/*` / legacy `charon/*` `model` strings under `"[opencode]".agents` and `.categories` |
+| Preserve | All non-model keys; foreign provider models (e.g. `openai/…`) |
+| Tiers | Reuse `resolveOpenCodeTiers` + `agentTierClass` / `categoryTierClass` |
+| Session | Copy host omo into sandbox HOME when absent, then patch from sandbox opencode config |
+| Tests | `opencode_omo_test.go`, `TestOpenCodeApplyAuthSyncsOmo`, `TestOpenCodeApplySyncsOmoModels`, session materialize assertions |
+
+Do **not** snapshot full omo into profiles, rewrite skills/prompts, or touch
+Codex/Claude/Pi for omo.
+
 ## Commands
 
 ```sh
-make build      # build ./charon
+make build      # build ./1api
 make test       # go vet + go test -race ./...
 make cover      # coverage summary
 make lint       # golangci-lint run
@@ -49,7 +71,7 @@ golangci-lint on Linux + macOS; keep all of them green.
 ## Architecture
 
 ```
-cmd/charon/         CLI entrypoint (thin; no business logic)
+cmd/1api/           CLI entrypoint (thin; no business logic)
   main.go           main, subcommand dispatch, usage
   commands.go       one cmd* func per subcommand + requireTool
 internal/artifact/  snapshot/restore primitives, no tool knowledge
@@ -57,13 +79,15 @@ internal/artifact/  snapshot/restore primitives, no tool knowledge
   MergedFileArtifact, KeychainArtifact; AtomicWrite
 internal/tools/   per-tool adapters
   tool.go           Tool struct, AuthSpec, registry (All/Find)
-  providers.go      guards for the shared "charon" provider entry (codex/opencode)
+  providers.go      guards for managed provider "1api" (+ legacy "charon")
   edit.go           JSON/TOML load-merge-write helpers (preserve unknown keys)
   codex.go / claude.go / opencode.go / opencode_tiers.go / opencode_omo.go / pi.go
 internal/profile/ snapshot store, split by concern:
   store.go (layout/config/name validation) · snapshot.go (Save/Add/Edit/EnsureDefault)
   apply.go (Apply/Undo/Drift/refresh) · backup.go (backups + prune) · manage.go (rm/mv/cp)
+  session.go (MaterializeSession for 1api run)
 internal/models/  fetch model lists from a provider API (openai/anthropic wire)
+internal/jsonc/   strip comments for OpenCode/omo JSONC
 internal/secret/  masking + platform keychain (darwin vs. other build tags)
 internal/tui/     bubbletea interactive menu
 ```
@@ -72,9 +96,10 @@ Layering (imports point left): `secret` ← `artifact` ← `tools` ← `profile`
 Profile names are validated centrally in `internal/profile/store.go` (`validateName`);
 never join a user-supplied name into a path without it.
 
-Data lives under `~/.config/charon/` (`$XDG_CONFIG_HOME` respected):
+Data lives under `~/.config/1api/` (`$XDG_CONFIG_HOME` respected):
 `profiles/<tool>/<name>/` (snapshot files + `manifest.json`),
 `backups/<tool>/<timestamp>/`, and `config.json` (active profile per tool).
+OpenCode oh-my models live separately at `~/.omo/omo.jsonc` (patched in place).
 
 ### How to add a new tool
 
