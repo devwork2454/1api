@@ -16,9 +16,10 @@ func (s *Store) ProviderStore() (*provider.Store, error) {
 }
 
 // MigrateProvidersOnce copies API-proxy profile Specs into central providers once.
+// Also re-runs when the flag is set but the providers directory is empty while
+// profile Specs with keys still exist (e.g. 1api opened before charon import).
 func (s *Store) MigrateProvidersOnce() error {
-	c := s.readConfig()
-	if c.ProvidersMigrated {
+	if !s.needsProviderMigration() {
 		return nil
 	}
 	ps, err := s.ProviderStore()
@@ -27,8 +28,18 @@ func (s *Store) MigrateProvidersOnce() error {
 	}
 
 	byFP := map[string]string{}
-
+	// Prefer registry tools (wire/default endpoint); also scan disk-only tool dirs.
+	toolsByName := map[string]*tools.Tool{}
 	for _, t := range tools.All() {
+		toolsByName[t.Name] = t
+	}
+	for _, name := range allToolNamesOnDisk(s) {
+		if _, ok := toolsByName[name]; !ok {
+			toolsByName[name] = &tools.Tool{Name: name, Title: name, Provider: provider.WireOpenAI}
+		}
+	}
+
+	for _, t := range toolsByName {
 		for _, name := range s.List(t.Name) {
 			sp, ok := s.GetSpec(t.Name, name)
 			if !ok || strings.TrimSpace(sp.Key) == "" {
@@ -67,7 +78,7 @@ func (s *Store) MigrateProvidersOnce() error {
 		}
 	}
 
-	c = s.readConfig()
+	c := s.readConfig()
 	c.ProvidersMigrated = true
 	return s.writeConfig(c)
 }
@@ -117,6 +128,8 @@ func (s *Store) ApplyProvider(t *tools.Tool, providerName string, skipVerify boo
 		Endpoint:   rec.Endpoint,
 		Key:        rec.Key,
 		Model:      rec.PrimaryModel(),
+		Low:        rec.Low,
+		High:       rec.High,
 		AllModels:  rec.Usable,
 		SkipVerify: skipVerify,
 	}); err != nil {

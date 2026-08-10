@@ -51,14 +51,34 @@ type Store struct {
 	Root string
 }
 
+// UI language and skin identifiers for the interactive menu.
+const (
+	LangZH   = "zh"
+	LangEN   = "en"
+	SkinTeal = "teal"
+	SkinMono = "mono"
+	SkinWarm = "warm"
+)
+
+// Legacy TUI mode values kept for config compatibility.
+const (
+	TUIModeNew = "new"
+	TUIModeOld = "old"
+)
+
 type config struct {
-	Active            map[string]string `json:"active"`                     // tool name -> profile name
-	OAuthFingerprint  map[string]string `json:"oauthFingerprint,omitempty"` // tool name -> last-seen OAuthFingerprint, to detect a fresh login
-	ToolProvider      map[string]string `json:"toolProvider,omitempty"`     // tool name -> central provider name
+	Active            map[string]string `json:"active"`
+	OAuthFingerprint  map[string]string `json:"oauthFingerprint,omitempty"`
+	ToolProvider      map[string]string `json:"toolProvider,omitempty"`
 	ProvidersMigrated bool              `json:"providersMigrated,omitempty"`
+	CharonImported    bool              `json:"charonImported,omitempty"`
+	TUIMode           string            `json:"tuiMode,omitempty"`
+	UILang            string            `json:"uiLang,omitempty"`
+	UISkin            string            `json:"uiSkin,omitempty"`
 }
 
 // Open returns the store rooted at $XDG_CONFIG_HOME/1api (default ~/.config/1api).
+// On first open it merges a sibling legacy ~/.config/charon tree when present.
 func Open() (*Store, error) {
 	base := os.Getenv("XDG_CONFIG_HOME")
 	if base == "" {
@@ -72,7 +92,11 @@ func Open() (*Store, error) {
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return nil, err
 	}
-	return &Store{Root: root}, nil
+	s := &Store{Root: root}
+	if err := s.ImportLegacyCharonOnce(); err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 func (s *Store) toolDir(tool string) string    { return filepath.Join(s.Root, "profiles", tool) }
@@ -130,6 +154,83 @@ func (s *Store) SetToolProvider(tool, providerName string) error {
 	} else {
 		c.ToolProvider[tool] = providerName
 	}
+	return s.writeConfig(c)
+}
+
+// TUIMode returns the legacy mode preference (new or old).
+func (s *Store) TUIMode() string {
+	switch s.readConfig().TUIMode {
+	case TUIModeOld:
+		return TUIModeOld
+	default:
+		return TUIModeNew
+	}
+}
+
+// TUIModeSet reports whether a legacy tuiMode was ever saved.
+func (s *Store) TUIModeSet() bool {
+	switch s.readConfig().TUIMode {
+	case TUIModeNew, TUIModeOld:
+		return true
+	default:
+		return false
+	}
+}
+
+// SetTUIMode persists the legacy mode preference.
+func (s *Store) SetTUIMode(mode string) error {
+	switch mode {
+	case TUIModeNew, TUIModeOld:
+	default:
+		return fmt.Errorf("invalid tui mode %q (want %s or %s)", mode, TUIModeNew, TUIModeOld)
+	}
+	c := s.readConfig()
+	c.TUIMode = mode
+	return s.writeConfig(c)
+}
+
+// UILang returns the TUI language (zh or en; default zh).
+func (s *Store) UILang() string {
+	switch s.readConfig().UILang {
+	case LangEN:
+		return LangEN
+	default:
+		return LangZH
+	}
+}
+
+// SetUILang persists the TUI language (zh or en).
+func (s *Store) SetUILang(lang string) error {
+	switch lang {
+	case LangZH, LangEN:
+	default:
+		return fmt.Errorf("invalid ui lang %q (want %s or %s)", lang, LangZH, LangEN)
+	}
+	c := s.readConfig()
+	c.UILang = lang
+	return s.writeConfig(c)
+}
+
+// UISkin returns the TUI skin id (teal, mono, or warm; default teal).
+func (s *Store) UISkin() string {
+	skin := s.readConfig().UISkin
+	switch skin {
+	case SkinMono, SkinWarm:
+		return skin
+	default:
+		return SkinTeal
+	}
+}
+
+// SetUISkin persists the TUI skin id.
+func (s *Store) SetUISkin(skin string) error {
+	switch skin {
+	case SkinTeal, SkinMono, SkinWarm:
+	default:
+		return fmt.Errorf("invalid ui skin %q", skin)
+	}
+	c := s.readConfig()
+	c.UISkin = skin
 	return s.writeConfig(c)
 }
 

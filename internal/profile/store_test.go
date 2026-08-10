@@ -1367,3 +1367,69 @@ func TestOpenCodeSwitchRestoresTieredAgents(t *testing.T) {
 		t.Errorf("provider options = %#v", opts)
 	}
 }
+
+func TestTUIModeDefaultIsNew(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	s, err := Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.TUIMode(); got != TUIModeNew {
+		t.Fatalf("TUIMode() = %q, want %q", got, TUIModeNew)
+	}
+	if s.TUIModeSet() {
+		t.Fatal("TUIModeSet() true before any SetTUIMode")
+	}
+	if err := s.SetTUIMode(TUIModeOld); err != nil {
+		t.Fatal(err)
+	}
+	if !s.TUIModeSet() {
+		t.Fatal("TUIModeSet() false after SetTUIMode")
+	}
+	if got := s.TUIMode(); got != TUIModeOld {
+		t.Fatalf("after set old: %q", got)
+	}
+	if err := s.SetTUIMode(TUIModeNew); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.TUIMode(); got != TUIModeNew {
+		t.Fatalf("after set new: %q", got)
+	}
+	if err := s.SetTUIMode("nope"); err == nil {
+		t.Fatal("expected error for invalid mode")
+	}
+}
+
+func TestUILangAndSkinDefaults(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	s, err := Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.UILang(); got != LangZH {
+		t.Fatalf("UILang() = %q, want %q", got, LangZH)
+	}
+	if got := s.UISkin(); got != SkinTeal {
+		t.Fatalf("UISkin() = %q, want %q", got, SkinTeal)
+	}
+	if err := s.SetUILang(LangEN); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.UILang(); got != LangEN {
+		t.Fatalf("after set en: %q", got)
+	}
+	if err := s.SetUISkin(SkinWarm); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.UISkin(); got != SkinWarm {
+		t.Fatalf("after set warm: %q", got)
+	}
+	if err := s.SetUILang("fr"); err == nil {
+		t.Fatal("expected invalid lang error")
+	}
+	if err := s.SetUISkin("neon"); err == nil {
+		t.Fatal("expected invalid skin error")
+	}
+}
