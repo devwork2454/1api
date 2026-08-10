@@ -52,8 +52,10 @@ type Store struct {
 }
 
 type config struct {
-	Active           map[string]string `json:"active"`                     // tool name -> profile name
-	OAuthFingerprint map[string]string `json:"oauthFingerprint,omitempty"` // tool name -> last-seen OAuthFingerprint, to detect a fresh login
+	Active            map[string]string `json:"active"`                     // tool name -> profile name
+	OAuthFingerprint  map[string]string `json:"oauthFingerprint,omitempty"` // tool name -> last-seen OAuthFingerprint, to detect a fresh login
+	ToolProvider      map[string]string `json:"toolProvider,omitempty"`     // tool name -> central provider name
+	ProvidersMigrated bool              `json:"providersMigrated,omitempty"`
 }
 
 // Open returns the store rooted at $XDG_CONFIG_HOME/1api (default ~/.config/1api).
@@ -98,6 +100,9 @@ func (s *Store) readConfig() config {
 	if c.Active == nil {
 		c.Active = map[string]string{}
 	}
+	if c.ToolProvider == nil {
+		c.ToolProvider = map[string]string{}
+	}
 	return c
 }
 
@@ -111,6 +116,22 @@ func (s *Store) writeConfig(c config) error {
 
 // Active returns the profile name currently marked active for a tool, or "".
 func (s *Store) Active(tool string) string { return s.readConfig().Active[tool] }
+
+// ActiveProvider returns the central provider bound to a tool, or "".
+func (s *Store) ActiveProvider(tool string) string {
+	return s.readConfig().ToolProvider[tool]
+}
+
+// SetToolProvider records which central provider a tool uses (does not apply live config).
+func (s *Store) SetToolProvider(tool, providerName string) error {
+	c := s.readConfig()
+	if providerName == "" {
+		delete(c.ToolProvider, tool)
+	} else {
+		c.ToolProvider[tool] = providerName
+	}
+	return s.writeConfig(c)
+}
 
 func (s *Store) setActive(tool, name string) error {
 	c := s.readConfig()
