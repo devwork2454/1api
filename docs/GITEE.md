@@ -40,12 +40,12 @@ https://help.gitee.com/repository/settings/sync-between-gitee-github
 
 可与 Actions 二选一或并存；**只写 GitHub，Gitee 只读**，避免双向乱推。
 
-## 4. Release 二进制（install.sh / `1api update` 回退）
+## 4. Release 二进制（install.sh / `1api update`）
 
 `scripts/install.sh` 与 `1api update` 顺序：
 
-1. **GitHub** `devwork2454/1api` releases
-2. 失败则 **Gitee** `wbff/1api` 同 tag 附件
+1. **Gitee** `wbff/1api`（默认，避免国内连 GitHub 15s 超时）
+2. 失败则 **GitHub** `devwork2454/1api` 同 tag 附件
 
 需要两边都有同名资产：
 
@@ -58,15 +58,18 @@ https://help.gitee.com/repository/settings/sync-between-gitee-github
 ## 5. 安装命令
 
 ```sh
-# 首选（脚本内自动 GitHub → Gitee）
-curl -fsSL https://github.com/devwork2454/1api/releases/latest/download/install.sh | sh
-
-# 强制只走 Gitee 资产（GitHub 全挂时）
-GITEE_REPO=wbff/1api VERSION=v1.5.5-devwork1 sh -c \
+# 推荐：直接 Gitee（需已知 VERSION，或已安装后用 1api update）
+VERSION=v1.5.5-devwork1 sh -c \
   'curl -fsSL "https://gitee.com/wbff/1api/releases/download/${VERSION}/install.sh" | sh'
+
+# 也可从 GitHub 拉 install.sh（脚本内会优先 Gitee 下二进制）
+curl -fsSL https://github.com/devwork2454/1api/releases/latest/download/install.sh | sh
 
 # 源码
 git clone https://gitee.com/wbff/1api.git && cd 1api && make install
+
+# 已安装：1api update 默认走 Gitee，失败再 GitHub
+1api update
 ```
 
-环境变量：`REPO`、`GITEE_REPO`（默认 `wbff/1api`）、`VERSION`。
+环境变量：`REPO`、`GITEE_REPO`（默认 `wbff/1api`）、`VERSION`、`CHARON_UPDATE_URL`（覆盖 `1api update` 入口 URL）。
