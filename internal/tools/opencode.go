@@ -103,10 +103,11 @@ func newOpenCode() *Tool {
 					// Live list + chat smoke on mid before we rewrite OpenCode/omo.
 					var reach []string
 					var verr error
-					tiers, reach, verr = VerifyOpenCodeAuth(a.Endpoint, a.Key, a.Model, ids)
+					mt, reach, verr := VerifyOpenCodeAuth(a.Endpoint, a.Key, a.Model, ids)
 					if verr != nil {
 						return fmt.Errorf("verify endpoint before apply: %w", verr)
 					}
+					tiers = opencodeTierModels{Mid: mt.Mid, Low: mt.Low, High: mt.High}
 					if len(reach) > 0 {
 						ids = reach
 					}

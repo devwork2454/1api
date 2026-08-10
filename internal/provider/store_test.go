@@ -109,12 +109,12 @@ func TestSetTiersAllowsWhenInUsable(t *testing.T) {
 func TestUpsertWithFilterReachable(t *testing.T) {
 	// httptest: list + chat OK for two models
 	mux := http.NewServeMux()
-	mux.HandleFunc("/v1/models", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/models", func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"data": []map[string]string{{"id": "m1"}, {"id": "m2-flash"}},
 		})
 	})
-	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(200)
 		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
 	})
@@ -148,12 +148,12 @@ func TestUpsertWithFilterReachable(t *testing.T) {
 
 func TestUpsertRejectsUnreachablePrimary(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/v1/models", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/models", func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"data": []map[string]string{{"id": "only"}},
 		})
 	})
-	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(200)
 		_, _ = w.Write([]byte(`{}`))
 	})

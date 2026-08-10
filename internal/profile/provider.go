@@ -10,6 +10,7 @@ import (
 	"1api/internal/tools"
 )
 
+// ProviderStore opens the central provider store under this profile root.
 func (s *Store) ProviderStore() (*provider.Store, error) {
 	return provider.OpenAt(s.Root)
 }

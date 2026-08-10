@@ -256,7 +256,7 @@ func TestApplyAuthAllUnusableNoWrite(t *testing.T) {
 			})
 			return
 		}
-		http.Error(w, "nope", 503)
+		http.Error(w, "nope", http.StatusServiceUnavailable)
 	}))
 	t.Cleanup(srv.Close)
 

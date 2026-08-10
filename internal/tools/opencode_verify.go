@@ -12,12 +12,12 @@ import (
 // VerifyOpenCodeAuth lists the endpoint, keeps only chat-reachable models,
 // classifies mid/low/high from that set, and requires at least one usable model.
 // Empty key skips the network and returns name-only tiers from candidates.
-func VerifyOpenCodeAuth(endpoint, key, primary string, candidates []string) (tiers opencodeTierModels, reachable []string, err error) {
+func VerifyOpenCodeAuth(endpoint, key, primary string, candidates []string) (tiers models.Tiers, reachable []string, err error) {
 	primary = strings.TrimSpace(primary)
 	candidates = cleanModelIDs(candidates)
 
 	if strings.TrimSpace(key) == "" {
-		return resolveOpenCodeTiers(primary, candidates), candidates, nil
+		return models.ResolveTiers(primary, candidates), candidates, nil
 	}
 
 	reachable, err = models.FilterReachable(models.OpenAI, endpoint, key, models.FilterOptions{
@@ -28,18 +28,18 @@ func VerifyOpenCodeAuth(endpoint, key, primary string, candidates []string) (tie
 	})
 	if err != nil {
 		if errors.Is(err, models.ErrNoUsableModels) {
-			return opencodeTierModels{}, nil, models.ErrNoUsableModels
+			return models.Tiers{}, nil, models.ErrNoUsableModels
 		}
-		return opencodeTierModels{}, nil, err
+		return models.Tiers{}, nil, err
 	}
 	if primary != "" && !containsString(reachable, primary) {
-		return opencodeTierModels{}, reachable, fmt.Errorf(
+		return models.Tiers{}, reachable, fmt.Errorf(
 			"primary model %q is not usable (not listed or chat failed); usable: %d", primary, len(reachable))
 	}
 	if primary == "" {
-		primary = resolveOpenCodeTiers("", reachable).Mid
+		primary = models.ResolveTiers("", reachable).Mid
 	}
-	tiers = resolveOpenCodeTiers(primary, reachable)
+	tiers = models.ResolveTiers(primary, reachable)
 	if tiers.Mid == "" {
 		return tiers, reachable, models.ErrNoUsableModels
 	}

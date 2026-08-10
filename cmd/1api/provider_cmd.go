@@ -15,7 +15,7 @@ import (
 
 func cmdProvider(store *profile.Store, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: 1api provider <ls|add|edit|rm|verify|models> ...")
+		return fmt.Errorf("usage: 1api provider ls|add|edit|rm|verify|models")
 	}
 	switch args[0] {
 	case "ls", "list":

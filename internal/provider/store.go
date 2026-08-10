@@ -142,7 +142,7 @@ func (s *Store) write(r Record) error {
 	return artifact.AtomicWrite(s.path(r.Name), data, 0o600)
 }
 
-// AuthSpec builds tools.AuthSpec fields from a provider (mid as primary model).
+// PrimaryModel returns the mid-tier model, or the first usable id.
 func (r Record) PrimaryModel() string {
 	if r.Mid != "" {
 		return r.Mid
