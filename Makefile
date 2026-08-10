@@ -12,14 +12,16 @@ PREFIX  ?= $(HOME)/.local
 build: ## Build ./1api for the current platform
 	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) $(PKG)
 
-install: ## Build and install to $(PREFIX)/bin
+install: ## Build and install to $(PREFIX)/bin (also charon → 1api symlink)
 	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) $(PKG)
 	install -d "$(PREFIX)/bin"
 	install -m 0755 $(BINARY) "$(PREFIX)/bin/$(BINARY)"
+	ln -sfn $(BINARY) "$(PREFIX)/bin/charon"
 	@echo "Installed $(BINARY) $(VERSION) -> $(PREFIX)/bin/$(BINARY)"
+	@echo "Symlink charon -> $(BINARY) (legacy command name)"
 
-uninstall: ## Remove the installed binary
-	rm -f "$(PREFIX)/bin/$(BINARY)"
+uninstall: ## Remove the installed binary and legacy charon symlink
+	rm -f "$(PREFIX)/bin/$(BINARY)" "$(PREFIX)/bin/charon"
 
 test: ## Run go vet + race tests
 	go vet ./...

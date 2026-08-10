@@ -30,6 +30,10 @@ switching away and back is always clean and reversible.
 - **Central providers.** Configure each external API (endpoint + key) **once**,
   pick high/mid/low from reachable models, then bind any tool with
   `1api use <tool> <provider>` — no re-entering credentials per CLI.
+- **Drop-in for `charon`.** `make install` also links `charon` → `1api`. On first
+  run, profiles under `~/.config/charon` are merged into `~/.config/1api` (no
+  overwrite of existing names; legacy dir kept) and API-proxy specs are
+  fingerprint-deduped into the central provider list.
 - **Model discovery.** Add a profile from just an endpoint + key; Charon fetches
   the model list and lets you pick one.
 - **Safe by default.** Every switch is backed up first, writes are atomic, and an
@@ -108,8 +112,18 @@ go build -o 1api ./cmd/1api   # or just build here
 
 ### Interactive menu
 
-Run `1api` with no arguments to open an arrow-key menu: pick a tool, then
-switch, add, edit, or delete profiles. Quit any time with `ctrl+c`.
+Run `1api` with no arguments. The menu opens **immediately** (no New/Classic
+picker). Default language is **Chinese**; switch to English under Settings.
+
+| Menu | What it does |
+|------|----------------|
+| **供应商 / Providers** | List providers, add one (endpoint + key), delete with **`d`** only when no tool uses it |
+| **工具绑定 / Tool bindings** | Per-tool bound provider; pick a tool → provider → set **high / mid / low** models → apply |
+| **设置 / Settings** | Language (`zh` / `en`) and skin (`teal` / `mono` / `warm`) |
+
+Navigation: **`esc`** goes back one screen; on the root menu it **quits**.
+**`ctrl+c`** always quits. Bind/apply shows a short busy status so the UI does
+not look frozen. Preferences live in `config.json` as `uiLang` and `uiSkin`.
 
 ### CLI reference
 
