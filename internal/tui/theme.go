@@ -120,10 +120,32 @@ func themedDelegate() apiDelegate {
 	return apiDelegate{DefaultDelegate: baseDelegate()}
 }
 
-// themedCompactDelegate is the same styling with single-line rows (no description),
-// keeping the one-line row gap so spacing stays consistent with the other screens.
-func themedCompactDelegate() apiDelegate {
-	d := baseDelegate()
-	d.ShowDescription = false
-	return apiDelegate{DefaultDelegate: d}
+func applySkin(skin string) {
+	switch skin {
+	case "mono":
+		colorBrand = lipgloss.Color("#4a5568")
+		colorOnDark = lipgloss.Color("#f7fafc")
+		colorAccent = lipgloss.AdaptiveColor{Light: "#2d3748", Dark: "#a0aec0"}
+	case "warm":
+		colorBrand = lipgloss.Color("#9c4221")
+		colorOnDark = lipgloss.Color("#fffaf0")
+		colorAccent = lipgloss.AdaptiveColor{Light: "#c05621", Dark: "#ed8936"}
+	default:
+		colorBrand = lipgloss.Color("#377375")
+		colorOnDark = lipgloss.Color("#e8f2f1")
+		colorAccent = lipgloss.AdaptiveColor{Light: "#1f6b68", Dark: "#5aa6a3"}
+	}
+	refreshStyles()
+}
+
+func refreshStyles() {
+	titleStyle = lipgloss.NewStyle().Bold(true).Foreground(colorOnDark).Background(colorBrand).Padding(0, 1)
+	statusStyle = lipgloss.NewStyle().Foreground(colorMuted).PaddingLeft(1)
+	successStyle = lipgloss.NewStyle().Foreground(colorSuccess).PaddingLeft(1)
+	errorStyle = lipgloss.NewStyle().Foreground(colorError).PaddingLeft(1)
+	warnStyle = lipgloss.NewStyle().Foreground(colorWarn).PaddingLeft(1)
+	promptStyle = lipgloss.NewStyle().Bold(true).Foreground(colorAccent)
+	hintStyle = lipgloss.NewStyle().Foreground(colorMuted)
+	stepStyle = lipgloss.NewStyle().Foreground(colorAccent).Bold(true).PaddingLeft(1)
+	bannerStyle = lipgloss.NewStyle().Foreground(colorBrand).Bold(true)
 }

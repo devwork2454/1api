@@ -1,8 +1,5 @@
 package tui
 
-import "fmt"
-
-// statusRender styles a status line for the level (glyph-prefixed); "" for an empty message.
 func statusRender(level statusLevel, msg string) string {
 	if msg == "" {
 		return ""
@@ -14,76 +11,5 @@ func statusRender(level statusLevel, msg string) string {
 		return errorStyle.Render("✗ " + msg)
 	default:
 		return statusStyle.Render(msg)
-	}
-}
-
-func (m model) View() string {
-	switch m.view {
-	case viewConfirmDelete:
-		body := "\n" + titleStyle.Render(m.tool.Title+" · delete profile") +
-			"\n\n" + warnStyle.Render(fmt.Sprintf("Delete profile %q? This can't be undone.", m.delTarget)) +
-			"\n\n" + hintStyle.Render("y: delete · n / esc: cancel")
-		return body
-	case viewFetching:
-		return m.wizardHeader() +
-			promptStyle.Render(m.spinner.View()+m.loadingMsg) +
-			"\n\n" + hintStyle.Render("fetching models from "+m.wiz.endpoint)
-	case viewAddEndpoint, viewAddKey, viewAddName, viewDupName, viewEditField:
-		body := m.wizardHeader() +
-			promptStyle.Render(m.prompt()) +
-			"\n\n  " + m.input.View() +
-			"\n\n" + hintStyle.Render("enter: continue · esc: cancel")
-		if line := statusRender(m.statusLvl, m.status); line != "" {
-			body += "\n" + line
-		}
-		return body
-	}
-	out := m.list.View()
-	if m.view == viewTools {
-		out = banner(m.version) + "\n\n" + out // blank line between the banner and the list title
-	}
-	if line := statusRender(m.statusLvl, m.status); line != "" {
-		out += "\n" + line
-	}
-	return out
-}
-
-// wizardHeader renders the titled bar and "Step n of N" line for add-flow screens
-// (just a blank line for non-wizard input steps).
-func (m model) wizardHeader() string {
-	n, total, label := wizardStep(m.view)
-	if total == 0 {
-		return "\n"
-	}
-	title := titleStyle.Render(m.tool.Title + " · new profile")
-	step := stepStyle.Render(fmt.Sprintf("Step %d of %d · %s", n, total, label))
-	return "\n" + title + "\n" + step + "\n\n"
-}
-
-func (m model) prompt() string {
-	if m.view == viewEditField {
-		switch m.editField {
-		case fieldName:
-			return "Edit name:"
-		case fieldURL:
-			return "Edit API base URL:"
-		case fieldToken:
-			return "Edit API key (hidden):"
-		}
-	}
-	switch m.view {
-	case viewAddEndpoint:
-		if m.tool.DefaultEndpoint != "" {
-			return "API base URL — leave blank for the default (" + m.tool.DefaultEndpoint + "):"
-		}
-		return "API base URL:"
-	case viewAddKey:
-		return "API key — input is hidden as you type:"
-	case viewAddName:
-		return "Name this profile (e.g. work, openrouter-fast):"
-	case viewDupName:
-		return "Name the duplicate of " + m.dupSource + ":"
-	default:
-		return ""
 	}
 }
