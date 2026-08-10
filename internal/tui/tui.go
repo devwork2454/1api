@@ -9,6 +9,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"1api/internal/profile"
@@ -35,6 +36,7 @@ type view int
 const (
 	viewTools view = iota
 	viewProfiles
+	viewProviders     // pick a central provider to bind to the current tool
 	viewAddEndpoint   // wizard: enter endpoint
 	viewAddKey        // wizard: enter API key
 	viewFetching      // wizard: fetching models
@@ -56,14 +58,16 @@ const (
 )
 
 const (
-	addSentinel = "\x00add"     // the "add new" list row
-	skipModel   = "\x00nomodel" // the "skip model" list row
-	sepSentinel = "\x00sep"     // a blank divider row (inert; cursor skips it)
+	addSentinel     = "\x00add"     // the "add new" list row
+	useProvSentinel = "\x00useprov" // bind a central provider
+	skipModel       = "\x00nomodel" // the "skip model" list row
+	sepSentinel     = "\x00sep"     // a blank divider row (inert; cursor skips it)
+	provPrefix      = "\x00prov:"   // provider row value prefix in viewProviders
 )
 
 // isSentinel reports whether v is a synthetic action row rather than a profile.
 func isSentinel(v string) bool {
-	return v == addSentinel || v == skipModel || v == sepSentinel
+	return v == addSentinel || v == useProvSentinel || v == skipModel || v == sepSentinel
 }
 
 type item struct {
@@ -249,7 +253,11 @@ func (m *model) loadTools() {
 			if drift, _ := m.store.Drift(t); drift {
 				active += " ⚠"
 			}
-			desc = fmt.Sprintf("active: %s · %s · %s", active, info.AuthMode, info.Endpoint)
+			if p := m.store.ActiveProvider(t.Name); p != "" {
+				desc = fmt.Sprintf("active: %s · provider: %s · %s · %s", active, p, info.AuthMode, info.Endpoint)
+			} else {
+				desc = fmt.Sprintf("active: %s · %s · %s", active, info.AuthMode, info.Endpoint)
+			}
 		}
 		items = append(items, item{title: t.Title, desc: desc, value: t.Name})
 		if m.tool != nil && t.Name == m.tool.Name {
@@ -293,12 +301,13 @@ func (m *model) loadProfiles(selectName string) {
 		}
 		items = append(items, item{title: title, desc: m.profileDetail(name), value: name, active: isActive})
 	}
-	// The add row sits below the profiles, set off by a thin divider.
+	// Action rows sit below the profiles, set off by a thin divider.
 	if m.tool.ApplyAuth != nil {
 		if len(saved) > 0 {
 			items = append(items, item{value: sepSentinel}) // gap between profiles and actions
 		}
 		items = append(items, item{title: "＋ Add new profile…", value: addSentinel})
+		items = append(items, item{title: "⇄ Use provider…", value: useProvSentinel})
 	}
 	m.list.SetDelegate(themedDelegate()) // two-line rows show each profile's url and model
 	m.list.SetItems(items)
@@ -439,10 +448,49 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	before := m.list.Index()
 	var cmd tea.Cmd
 	m.list, cmd = m.list.Update(msg)
-	if m.view == viewProfiles {
+	if m.view == viewProfiles || m.view == viewProviders {
 		m.skipSeparators(before)
 	}
 	return m, cmd
+}
+
+func (m *model) loadProviders() {
+	var items []list.Item
+	ps, err := m.store.ProviderStore()
+	if err != nil {
+		m.setStatus(statusErr, err.Error())
+		m.list.SetItems(nil)
+		return
+	}
+	active := m.store.ActiveProvider(m.tool.Name)
+	names := ps.List()
+	selected := 0
+	for i, name := range names {
+		r, err := ps.Get(name)
+		if err != nil {
+			continue
+		}
+		title := name
+		if name == active {
+			title = "✓ " + title
+		}
+		desc := r.Endpoint + " · mid=" + r.Mid
+		if r.NeedsVerify {
+			desc += " · stale"
+		}
+		items = append(items, item{title: title, desc: desc, value: provPrefix + name, active: name == active})
+		if name == active {
+			selected = i
+		}
+	}
+	if len(items) == 0 {
+		m.setStatus(statusInfo, "No providers yet — run: 1api provider add --name … --key …")
+	}
+	m.list.SetDelegate(themedDelegate())
+	m.list.SetItems(items)
+	m.list.Select(selected)
+	m.list.Title = m.tool.Title + " — choose provider"
+	m.setHelpKeys(keySwitch, keyBack)
 }
 
 // onEditKey opens the edit form for the highlighted profile ("e" on the profiles
@@ -562,6 +610,10 @@ func (m model) onEsc() (tea.Model, tea.Cmd) {
 		m.clearStatus()
 		m.loadTools()
 		m.resize() // banner returns → shrink the list
+	case viewProviders:
+		m.view = viewProfiles
+		m.clearStatus()
+		m.loadProfiles("")
 	case viewEditForm:
 		m.editField = ""               // leaving edit expires the field focus → next entry starts on Name
 		return m.finishAdd(m.wiz.name) // back applies edits automatically — no explicit save step
@@ -609,6 +661,12 @@ func (m model) onEnter() (tea.Model, tea.Cmd) {
 			m.startInput(exampleEndpoint, false)
 			return m, textinput.Blink
 		}
+		if it.value == useProvSentinel {
+			m.view = viewProviders
+			m.clearStatus()
+			m.loadProviders()
+			return m, nil
+		}
 		backup, err := m.store.Apply(m.tool, it.value)
 		if err != nil {
 			m.setStatus(statusErr, err.Error())
@@ -618,6 +676,24 @@ func (m model) onEnter() (tea.Model, tea.Cmd) {
 				it.value, info.Endpoint, secret.Mask(info.Secret), backup))
 			m.loadProfiles(it.value)
 		}
+
+	case viewProviders:
+		name := strings.TrimPrefix(it.value, provPrefix)
+		if name == "" || name == it.value {
+			return m, nil
+		}
+		if err := m.store.ApplyProvider(m.tool, name, false); err != nil {
+			// Retry offline if live probe fails (e.g. no network in menu).
+			if err2 := m.store.ApplyProvider(m.tool, name, true); err2 != nil {
+				m.setStatus(statusErr, err.Error())
+				return m, nil
+			}
+			m.setStatus(statusOK, "Bound to provider "+name+" (offline; run provider verify later)")
+		} else {
+			m.setStatus(statusOK, "Bound to provider "+name)
+		}
+		m.view = viewProfiles
+		m.loadProfiles("")
 
 	case viewEditForm:
 		// "e" edits the highlighted field; enter is inert (esc saves & backs out).
