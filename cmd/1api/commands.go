@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"1api/internal/models"
 	"1api/internal/profile"
@@ -644,13 +646,15 @@ func cmdUninstall() error {
 }
 
 const (
-	// Gitee is the default update source (China-reachable). No stable
-	// /latest/download redirect — resolve tag via API first.
-	giteeOwnerRepo       = "wbff/1api"
-	giteeReleasesAPI     = "https://gitee.com/api/v5/repos/" + giteeOwnerRepo + "/releases/latest"
-	giteeReleaseDownload = "https://gitee.com/" + giteeOwnerRepo + "/releases/download"
-	// GitHub kept as optional fallback only (often times out from CN).
+	// Gitee has no stable /latest/download redirect — resolve tag via API first.
+	giteeOwnerRepo         = "wbff/1api"
+	giteeReleasesAPI       = "https://gitee.com/api/v5/repos/" + giteeOwnerRepo + "/releases/latest"
+	giteeReleaseDownload   = "https://gitee.com/" + giteeOwnerRepo + "/releases/download"
 	githubUpdateInstallURL = "https://github.com/devwork2454/1api/releases/latest/download/install.sh"
+
+	// updateProbeHost is a cheap TCP reachability check target for GitHub.
+	updateProbeHost = "github.com:443"
+	updateProbeWait = 2 * time.Second
 )
 
 // updateInstallURL returns a human-readable primary update source label/URL.
@@ -659,13 +663,62 @@ func updateInstallURL() string {
 	if u := strings.TrimSpace(os.Getenv("CHARON_UPDATE_URL")); u != "" {
 		return u
 	}
-	return giteeReleaseDownload + "/<latest>/install.sh"
+	if preferGiteeUpdate() {
+		return giteeReleaseDownload + "/<latest>/install.sh"
+	}
+	return githubUpdateInstallURL
+}
+
+// preferGiteeUpdate chooses Gitee as the primary install mirror.
+// Order: CHARON_UPDATE_SOURCE → CN locale/TZ → GitHub unreachable in 2s → else GitHub.
+func preferGiteeUpdate() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("CHARON_UPDATE_SOURCE"))) {
+	case "gitee", "cn", "china":
+		return true
+	case "github", "gh", "global":
+		return false
+	}
+	if looksLikeChinaEnv() {
+		return true
+	}
+	// Outside CN markers: use GitHub when the host answers quickly.
+	return !githubQuickReachable()
+}
+
+// looksLikeChinaEnv is a soft signal from timezone / locale (no geo-IP).
+func looksLikeChinaEnv() bool {
+	tz := strings.ToLower(strings.TrimSpace(os.Getenv("TZ")))
+	for _, p := range []string{
+		"asia/shanghai", "asia/chongqing", "asia/harbin", "asia/urumqi",
+	} {
+		if tz == p || strings.Contains(tz, p) {
+			return true
+		}
+	}
+	for _, key := range []string{"LC_ALL", "LANG", "LC_MESSAGES"} {
+		v := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+		if strings.HasPrefix(v, "zh_cn") || strings.HasPrefix(v, "zh-cn") {
+			return true
+		}
+	}
+	return false
+}
+
+// githubQuickReachable reports whether github.com:443 accepts a TCP connect
+// within updateProbeWait. Used only to pick primary mirror; download still
+// falls back if the chosen host fails later.
+var githubQuickReachable = func() bool {
+	conn, err := net.DialTimeout("tcp", updateProbeHost, updateProbeWait)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
 }
 
 // giteeInstallFetchScript is a POSIX fragment: resolve latest Gitee release tag
 // and curl that tag's install.sh. Gitee does not reliably support GitHub-style
 // .../releases/latest/download/install.sh.
-// curl uses short connect timeouts so a dead host fails fast.
 func giteeInstallFetchScript() string {
 	// sed extracts "tag_name":"v…" without jq; fails closed if missing.
 	curl := "curl -fsSL --connect-timeout 10 --max-time 120"
@@ -673,39 +726,58 @@ func giteeInstallFetchScript() string {
 		`test -n "$tag" && ` + curl + ` ` + shellQuote(giteeReleaseDownload) + `/"$tag"/install.sh`
 }
 
-// cmdUpdate upgrades the binary via online install.sh: Gitee first, then GitHub.
+func runUpdateCurlPipe(label, shellSnippet string) error {
+	fmt.Printf("Checking for updates and upgrading 1api from %s …\n", label)
+	// #nosec G204 -- fixed release hosts or explicit operator override.
+	cmd := exec.Command("sh", "-c", shellSnippet)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// cmdUpdate upgrades via install.sh. Primary mirror is network/locale-aware
+// (Gitee in CN, GitHub otherwise); the other side is always the fallback.
+// CHARON_UPDATE_URL forces a single URL; CHARON_UPDATE_SOURCE=gitee|github forces order.
 func cmdUpdate() error {
 	if u := strings.TrimSpace(os.Getenv("CHARON_UPDATE_URL")); u != "" {
-		fmt.Printf("Checking for updates and upgrading 1api from\n  %s\n", u)
-		// #nosec G204 -- explicit operator override.
-		cmd := exec.Command("sh", "-c", "curl -fsSL --connect-timeout 15 --max-time 300 "+shellQuote(u)+" | sh")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
+		if err := runUpdateCurlPipe(u, "curl -fsSL --connect-timeout 15 --max-time 300 "+shellQuote(u)+" | sh"); err != nil {
 			return fmt.Errorf("update failed: %w", err)
 		}
 		return nil
 	}
 
-	fmt.Printf("Checking for updates and upgrading 1api from Gitee %s …\n", giteeOwnerRepo)
-	// #nosec G204 -- fixed Gitee API + release download hosts.
-	cmd := exec.Command("sh", "-c", giteeInstallFetchScript()+" | sh")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	giteeErr := cmd.Run()
-	if giteeErr == nil {
-		return nil
-	}
-	fmt.Printf("Gitee update failed: %v\nTrying GitHub %s …\n", giteeErr, githubUpdateInstallURL)
+	giteeSnippet := giteeInstallFetchScript() + " | sh"
+	githubSnippet := "curl -fsSL --connect-timeout 15 --max-time 300 " + shellQuote(githubUpdateInstallURL) + " | sh"
 
-	// #nosec G204 -- fixed GitHub release URL (fallback).
-	cmd = exec.Command("sh", "-c", "curl -fsSL --connect-timeout 15 --max-time 300 "+shellQuote(githubUpdateInstallURL)+" | sh")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("update failed on Gitee and GitHub: %w", err)
+	type attempt struct {
+		label   string
+		snippet string
 	}
-	return nil
+	var order []attempt
+	if preferGiteeUpdate() {
+		order = []attempt{
+			{"Gitee " + giteeOwnerRepo, giteeSnippet},
+			{"GitHub", githubSnippet},
+		}
+	} else {
+		order = []attempt{
+			{"GitHub", githubSnippet},
+			{"Gitee " + giteeOwnerRepo, giteeSnippet},
+		}
+	}
+
+	var errs []string
+	for i, a := range order {
+		err := runUpdateCurlPipe(a.label, a.snippet)
+		if err == nil {
+			return nil
+		}
+		errs = append(errs, a.label+": "+err.Error())
+		if i+1 < len(order) {
+			fmt.Printf("%s update failed: %v\nTrying %s …\n", a.label, err, order[i+1].label)
+		}
+	}
+	return fmt.Errorf("update failed on all mirrors: %s", strings.Join(errs, "; "))
 }
 
 // shellQuote wraps s in single quotes for a POSIX shell, escaping embedded quotes.
