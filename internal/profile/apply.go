@@ -54,6 +54,11 @@ func (s *Store) switchTo(t *tools.Tool, sourceDir, backupLabel, resultingActive 
 	if err := s.restoreFrom(t, sourceDir); err != nil {
 		return backupDir, err
 	}
+	if t.Name == "opencode" {
+		if err := tools.SyncOpenCodeOmo(); err != nil {
+			return backupDir, fmt.Errorf("omo sync after switch: %w", err)
+		}
+	}
 	if resultingActive != "" {
 		if err := s.setActive(t.Name, resultingActive); err != nil {
 			return backupDir, err

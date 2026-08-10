@@ -58,6 +58,11 @@ func (s *Store) MaterializeSession(t *tools.Tool, name, root string) error {
 			return err
 		}
 	}
+	if t.Name == "opencode" {
+		if err := tools.SeedAndSyncOpenCodeOmoAt(root); err != nil {
+			return fmt.Errorf("session omo sync: %w", err)
+		}
+	}
 	return nil
 }
 
