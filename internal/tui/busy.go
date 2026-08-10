@@ -15,6 +15,8 @@ const (
 	busyVerify
 	busyBind
 	busyBindMulti
+	// busyFetchTiers: bind flow finished refreshing usable catalog.
+	busyFetchTiers
 )
 
 func runBusy(fn func() busyDoneMsg) tea.Cmd {

@@ -407,6 +407,13 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.toolName, m.provName = "", ""
 			m.mid, m.low, m.high = "", "", ""
 			m.loadBindings()
+		case busyFetchTiers:
+			if msg.level == statusErr {
+				m.view = aViewPickProv
+				m.loadProvidersForTool(m.toolName)
+				return m, nil
+			}
+			return m.openTierPickFromCache()
 		default:
 			if m.view == aViewProviders {
 				m.loadProviders()
@@ -562,7 +569,7 @@ func (m app) onEnter() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.provName = strings.TrimPrefix(it.value, aProvPrefix)
-		return m.beginTierPick()
+		return m.beginTierPickRefresh()
 	case aViewSettings:
 		switch it.value {
 		case aLangSentinel:
@@ -599,7 +606,10 @@ func (m app) onEnter() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m app) beginTierPick() (tea.Model, tea.Cmd) {
+// beginTierPickRefresh probes the provider for a fresh usable catalog, then
+// opens mid/low/high pickers. Avoids the stale single-mid usable set left by
+// offline add / skip-verify paths.
+func (m app) beginTierPickRefresh() (tea.Model, tea.Cmd) {
 	ps, err := m.store.ProviderStore()
 	if err != nil {
 		m.setStatus(statusErr, err.Error())
@@ -610,9 +620,62 @@ func (m app) beginTierPick() (tea.Model, tea.Cmd) {
 		m.setStatus(statusErr, err.Error())
 		return m, nil
 	}
+	// Multi-model catalog already on disk — skip network (even if marked
+	// needsVerify; that flag only means tiers may be stale, not the id list).
+	if len(r.Usable) > 1 {
+		return m.openTierPick(r)
+	}
+
+	provName := m.provName
+	store := m.store
+	m.busy = true
+	m.spinner = newSpinner()
+	m.setStatus(statusInfo, m.t(msgFetching))
+	return m, tea.Batch(m.spinner.Tick, runBusy(func() busyDoneMsg {
+		ps, err := store.ProviderStore()
+		if err != nil {
+			return busyDoneMsg{level: statusErr, text: err.Error(), kind: busyFetchTiers}
+		}
+		// Always re-list + probe so mid/low/high show the full reachable set.
+		refreshed, err := ps.Refresh(provName, provider.UpsertOptions{})
+		if err != nil {
+			// Fall back to whatever is cached so the user can still bind.
+			cur, gerr := ps.Get(provName)
+			if gerr != nil || len(cur.Usable) == 0 {
+				return busyDoneMsg{level: statusErr, text: err.Error(), kind: busyFetchTiers}
+			}
+			return busyDoneMsg{
+				level: statusInfo,
+				text:  fmt.Sprintf("%s · %v", tr(store.UILang(), msgProvStale), err),
+				kind:  busyFetchTiers,
+			}
+		}
+		_ = refreshed
+		return busyDoneMsg{
+			level: statusOK,
+			text:  tr(store.UILang(), msgFetching),
+			kind:  busyFetchTiers,
+		}
+	}))
+}
+
+func (m app) openTierPickFromCache() (tea.Model, tea.Cmd) {
+	ps, err := m.store.ProviderStore()
+	if err != nil {
+		m.setStatus(statusErr, err.Error())
+		return m, nil
+	}
+	r, err := ps.Get(m.provName)
+	if err != nil {
+		m.setStatus(statusErr, err.Error())
+		return m, nil
+	}
+	return m.openTierPick(r)
+}
+
+func (m app) openTierPick(r provider.Record) (tea.Model, tea.Cmd) {
 	m.allModels = append([]string{}, r.Usable...)
 	if len(m.allModels) == 0 {
-		// offline: use existing tiers or placeholder
 		for _, id := range []string{r.Mid, r.Low, r.High} {
 			if id != "" {
 				m.allModels = append(m.allModels, id)
@@ -860,9 +923,17 @@ func (m app) finishAdd(skipVerify bool) (tea.Model, tea.Cmd) {
 		m.loadProviders()
 		return m, nil
 	}
+	// Prefer the full catalog from the just-completed fetch (m.allModels).
+	// Without it, SkipVerify would store only the chosen mid and bind would
+	// show a single-model list.
+	var catalog []string
+	if len(m.allModels) > 0 {
+		catalog = append([]string{}, m.allModels...)
+		skipVerify = true // already probed via fetchModelsCmd
+	}
 	r, err := ps.Upsert(provider.Spec{
 		Name: m.wiz.name, Endpoint: m.wiz.endpoint, Key: m.wiz.key,
-		Wire: m.wiz.wire, Model: m.wiz.model, SkipVerify: skipVerify,
+		Wire: m.wiz.wire, Model: m.wiz.model, Usable: catalog, SkipVerify: skipVerify,
 	}, provider.UpsertOptions{SkipVerify: skipVerify})
 	if err != nil {
 		m.setStatus(statusErr, err.Error())
@@ -870,12 +941,13 @@ func (m app) finishAdd(skipVerify bool) (tea.Model, tea.Cmd) {
 		m.loadProviders()
 		return m, nil
 	}
-	msg := fmt.Sprintf("%s · mid=%s", r.Name, orDash(r.Mid))
-	if skipVerify || r.NeedsVerify {
+	msg := fmt.Sprintf("%s · mid=%s · %d models", r.Name, orDash(r.Mid), len(r.Usable))
+	if r.NeedsVerify {
 		msg += " · " + m.t(msgProvStale)
 	}
 	m.setStatus(statusOK, msg)
 	m.wiz = providerWiz{}
+	m.allModels = nil
 	m.view = aViewProviders
 	m.loadProviders()
 	return m, nil
