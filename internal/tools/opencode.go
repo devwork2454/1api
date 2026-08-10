@@ -116,7 +116,13 @@ func newOpenCode() *Tool {
 			if err := ensureOnlyManagedChanged(original, provider); err != nil {
 				return err
 			}
-			return writeJSONMap(configPath, cfg, 0o600)
+			if err := writeJSONMap(configPath, cfg, 0o600); err != nil {
+				return err
+			}
+			if err := SyncOpenCodeOmo(); err != nil {
+				return err
+			}
+			return nil
 		},
 		Detected: func() bool {
 			return detected("opencode", configPath, authPath)
