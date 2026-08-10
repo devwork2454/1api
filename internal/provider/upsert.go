@@ -45,15 +45,22 @@ func (s *Store) Upsert(spec Spec, opt UpsertOptions) (Record, error) {
 	primary := strings.TrimSpace(spec.Model)
 
 	if skip {
-		// Offline / test: trust caller ids; mark needsVerify so next use re-probes.
-		usable = uniqueNonEmpty(append([]string{}, primary, spec.Low, spec.High))
-		if len(usable) == 0 {
-			usable = []string{"default"}
-			if primary == "" {
-				primary = "default"
+		// Offline / test, or caller already ran FilterReachable and passed Usable.
+		if len(spec.Usable) > 0 {
+			usable = uniqueNonEmpty(append([]string{}, spec.Usable...))
+			// Catalog supplied by caller (typically just probed) — not stale.
+			needsVerify = false
+		} else {
+			usable = uniqueNonEmpty(append([]string{}, primary, spec.Low, spec.High))
+			if len(usable) == 0 {
+				usable = []string{"default"}
+				if primary == "" {
+					primary = "default"
+				}
 			}
+			// Sparse offline set — re-probe on next bind/use.
+			needsVerify = true
 		}
-		needsVerify = true
 	} else {
 		usable, err = models.FilterReachable(models.Provider(wire), ep, key, models.FilterOptions{
 			HTTPClient: opt.HTTPClient,
@@ -243,6 +250,36 @@ func (s *Store) EnsureReady(name string, opt UpsertOptions) (Record, error) {
 	}
 	if cur.NeedsVerify || len(cur.Usable) == 0 || cur.Mid == "" {
 		return s.Refresh(name, opt)
+	}
+	return cur, nil
+}
+
+// ReplaceUsable writes a freshly probed model catalog without changing tiers
+// (except filling empty low/high from mid). Used after bind-time refresh.
+func (s *Store) ReplaceUsable(name string, usable []string) (Record, error) {
+	cur, err := s.Get(name)
+	if err != nil {
+		return Record{}, err
+	}
+	usable = uniqueNonEmpty(usable)
+	if len(usable) == 0 {
+		return Record{}, fmt.Errorf("provider %q: empty usable catalog", name)
+	}
+	cur.Usable = usable
+	cur.NeedsVerify = false
+	if cur.Mid == "" {
+		tiers := models.ResolveTiers("", usable)
+		cur.Mid, cur.Low, cur.High = tiers.Mid, tiers.Low, tiers.High
+	} else {
+		if cur.Low == "" {
+			cur.Low = cur.Mid
+		}
+		if cur.High == "" {
+			cur.High = cur.Mid
+		}
+	}
+	if err := s.write(cur); err != nil {
+		return Record{}, err
 	}
 	return cur, nil
 }

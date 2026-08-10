@@ -44,7 +44,10 @@ type Spec struct {
 	Model    string // preferred mid / primary
 	Low      string // optional explicit low
 	High     string // optional explicit high
-	// SkipVerify skips FilterReachable (tests / offline).
+	// Usable is an optional pre-probed model catalog. When SkipVerify and
+	// non-empty, it becomes Record.Usable (and NeedsVerify stays false).
+	Usable []string
+	// SkipVerify skips FilterReachable (tests / offline / catalog already probed).
 	SkipVerify bool
 	// HTTPClient is optional; tests inject httptest via models options through Verify.
 	// Not stored on disk.

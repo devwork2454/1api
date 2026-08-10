@@ -37,6 +37,25 @@ func TestUpsertSkipVerifyAndGet(t *testing.T) {
 	if !r.NeedsVerify {
 		t.Fatal("expected NeedsVerify after skip")
 	}
+
+	// Pre-probed catalog: keep full usable and clear NeedsVerify.
+	r2, err := s.Upsert(Spec{
+		Name: "catalog", Endpoint: "https://c.example/v1", Key: "sk-c",
+		Model: "mid-m", Usable: []string{"low-m", "mid-m", "high-m", "extra"},
+		SkipVerify: true,
+	}, UpsertOptions{SkipVerify: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r2.NeedsVerify {
+		t.Fatal("catalog Upsert should not mark NeedsVerify")
+	}
+	if len(r2.Usable) != 4 {
+		t.Fatalf("usable = %v", r2.Usable)
+	}
+	if r2.Mid != "mid-m" {
+		t.Fatalf("mid = %s", r2.Mid)
+	}
 	got, err := s.Get("demo")
 	if err != nil {
 		t.Fatal(err)
