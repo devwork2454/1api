@@ -60,7 +60,7 @@ func TestRunProfileLifecycle(t *testing.T) {
 	home := sandbox(t)
 	seedCodex(t, home)
 
-	if err := run([]string{"add", "codex", "--name", "work", "--key", "sk-test", "--endpoint", "https://example.com/v1"}); err != nil {
+	if err := run([]string{"add", "codex", "--name", "work", "--key", "sk-test", "--endpoint", "https://example.com/v1", "--no-verify"}); err != nil {
 		t.Fatalf("add: %v", err)
 	}
 	if err := run([]string{"ls", "codex"}); err != nil {
@@ -130,7 +130,7 @@ func TestRunRejectsInvalidURLAndKey(t *testing.T) {
 		}
 	}
 
-	if err := run([]string{"add", "codex", "--name", "good", "--key", "sk-test", "--endpoint", "https://example.com/v1"}); err != nil {
+	if err := run([]string{"add", "codex", "--name", "good", "--key", "sk-test", "--endpoint", "https://example.com/v1", "--no-verify"}); err != nil {
 		t.Fatalf("add with valid endpoint/key: %v", err)
 	}
 	if err := run([]string{"edit", "codex", "good", "--endpoint", "not a url"}); err == nil {
@@ -148,10 +148,10 @@ func TestRunEditDoesNotSwitchInactiveProfile(t *testing.T) {
 	home := sandbox(t)
 	seedCodex(t, home)
 
-	if err := run([]string{"add", "codex", "--name", "work", "--key", "sk-work", "--endpoint", "https://work.example.com/v1"}); err != nil {
+	if err := run([]string{"add", "codex", "--name", "work", "--key", "sk-work", "--endpoint", "https://work.example.com/v1", "--no-verify"}); err != nil {
 		t.Fatalf("add work: %v", err)
 	}
-	if err := run([]string{"add", "codex", "--name", "other", "--key", "sk-other", "--endpoint", "https://other.example.com/v1"}); err != nil {
+	if err := run([]string{"add", "codex", "--name", "other", "--key", "sk-other", "--endpoint", "https://other.example.com/v1", "--no-verify"}); err != nil {
 		t.Fatalf("add other: %v", err)
 	}
 	if err := run([]string{"switch", "codex", "work"}); err != nil {

@@ -11,6 +11,7 @@ import (
 
 	"1api/internal/models"
 	"1api/internal/profile"
+	"1api/internal/provider"
 	"1api/internal/secret"
 	"1api/internal/tools"
 )
@@ -56,6 +57,7 @@ type statusRow struct {
 	Title    string `json:"title"`
 	Detected bool   `json:"detected"`
 	Active   string `json:"active,omitempty"`
+	Provider string `json:"provider,omitempty"`
 	AuthMode string `json:"authMode,omitempty"`
 	Endpoint string `json:"endpoint,omitempty"`
 	Model    string `json:"model,omitempty"`
@@ -79,6 +81,7 @@ func cmdStatus(store *profile.Store, args []string) error {
 			info, _ := t.Describe()
 			r.Detected = true
 			r.Active = store.Active(t.Name)
+			r.Provider = store.ActiveProvider(t.Name)
 			r.AuthMode = info.AuthMode
 			r.Endpoint = info.Endpoint
 			r.Model = info.Model
@@ -95,10 +98,10 @@ func cmdStatus(store *profile.Store, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
-	fmt.Fprintln(w, "TOOL\tACTIVE\tAUTH\tENDPOINT\tMODEL\tEFFORT\tSECRET")
+	fmt.Fprintln(w, "TOOL\tACTIVE\tPROVIDER\tAUTH\tENDPOINT\tMODEL\tEFFORT\tSECRET")
 	for _, r := range rows {
 		if !r.Detected {
-			fmt.Fprintf(w, "%s\t—\t(not detected)\t\t\t\t\n", r.Title)
+			fmt.Fprintf(w, "%s\t—\t—\t(not detected)\t\t\t\t\n", r.Title)
 			continue
 		}
 		active := r.Active
@@ -108,6 +111,10 @@ func cmdStatus(store *profile.Store, args []string) error {
 		if r.Modified {
 			active += " (modified)" // live config changed since the last switch
 		}
+		prov := r.Provider
+		if prov == "" {
+			prov = "—"
+		}
 		model, effort := r.Model, r.Effort
 		if model == "" {
 			model = "—"
@@ -115,7 +122,7 @@ func cmdStatus(store *profile.Store, args []string) error {
 		if effort == "" {
 			effort = "—"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.Title, active, r.AuthMode, r.Endpoint, model, effort, r.Secret)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.Title, active, prov, r.AuthMode, r.Endpoint, model, effort, r.Secret)
 	}
 	return w.Flush()
 }
@@ -472,15 +479,24 @@ func cmdAdd(store *profile.Store, args []string) error {
 		return err
 	}
 	ep := t.ResolveEndpoint(*endpoint)
-	if err := store.AddProfile(t, *name, profile.Spec{
-		Endpoint:   ep,
-		Key:        *key,
-		Model:      *model,
-		SkipVerify: *noVerify,
-	}); err != nil {
+	if err := store.UpsertProviderAndBind(t, *name, provider.Spec{
+		Endpoint: ep,
+		Key:      *key,
+		Wire:     t.Provider,
+		Model:    *model,
+	}, *noVerify); err != nil {
 		return err
 	}
-	fmt.Printf("Added and activated %s profile %q (%s · %s)\n", t.Title, *name, ep, *model)
+	if err := store.SaveWithSpec(t, *name, profile.Spec{
+		Endpoint: ep,
+		Key:      *key,
+		Model:    *model,
+	}); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: provider bound but profile snapshot: %v\n", err)
+	} else {
+		_ = store.SetActiveName(t.Name, *name)
+	}
+	fmt.Printf("Added provider %q and bound %s (%s · %s)\n", *name, t.Title, ep, *model)
 	return nil
 }
 

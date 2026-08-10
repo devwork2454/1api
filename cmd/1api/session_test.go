@@ -46,7 +46,7 @@ func TestCmdRunDoesNotTouchLiveConfig(t *testing.T) {
 	}
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	if err := run([]string{"add", "codex", "--name", "work", "--key", "sk-test", "--endpoint", "https://example.com/v1"}); err != nil {
+	if err := run([]string{"add", "codex", "--name", "work", "--key", "sk-test", "--endpoint", "https://example.com/v1", "--no-verify"}); err != nil {
 		t.Fatalf("add: %v", err)
 	}
 

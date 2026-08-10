@@ -50,6 +50,9 @@ func run(args []string) error {
 			fmt.Fprintf(os.Stderr, "warning: could not snapshot %s: %v\n", t.Name, err)
 		}
 	}
+	if err := store.MigrateProvidersOnce(); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: provider migration: %v\n", err)
+	}
 
 	if len(args) == 0 {
 		return tui.Run(store, version)
@@ -60,8 +63,10 @@ func run(args []string) error {
 		return cmdStatus(store, args[1:])
 	case "ls":
 		return cmdList(store, args[1:])
-	case "switch", "use":
+	case "switch":
 		return cmdSwitch(store, args[1:])
+	case "use":
+		return cmdUse(store, args[1:])
 	case "run":
 		return cmdRun(store, args[1:])
 	case "alias":
@@ -80,6 +85,8 @@ func run(args []string) error {
 		return cmdModels(args[1:])
 	case "verify":
 		return cmdVerify(args[1:])
+	case "provider":
+		return cmdProvider(store, args[1:])
 	case "add":
 		return cmdAdd(store, args[1:])
 	case "edit":
@@ -119,11 +126,18 @@ Usage:
   1api refresh <tool>      capture in-session changes (model, effort) into active profile
   1api models <tool>       list models from an API (--key, --endpoint)
   1api verify <tool>       probe live endpoint (list + chat) and show mid/low/high
-                             (--key --endpoint --model; defaults from live config)
-  1api add <tool>          add+activate a profile (--name --key [--endpoint --model])
-                             OpenCode verifies connectivity before write; --no-verify to skip
+                              (--key --endpoint --model; defaults from live config)
+  1api provider ls         list central providers (--json)
+  1api provider add        add a provider once (--name --key [--endpoint --wire --model --low --high] [--no-verify])
+  1api provider edit <n>   edit a provider (--endpoint --key --model --low --high --wire) [--no-verify]
+  1api provider rm <n>     delete a provider
+  1api provider verify <n> re-probe usable models and refresh mid/low/high
+  1api provider models <n> show usable models and tier assignment
+  1api use <tool> <prov>   bind a tool to a central provider and apply it [--no-verify]
+  1api add <tool>          add provider + bind tool (--name --key [--endpoint --model])
+                              verifies connectivity before write; --no-verify to skip
   1api edit <tool> <p>     change a profile's endpoint/key/model/name
-                             OpenCode verifies connectivity before write; --no-verify to skip
+                              OpenCode verifies connectivity before write; --no-verify to skip
   1api rename <tool> <o> <n>  rename a saved profile
   1api cp <tool> <src> <dst>  duplicate a saved profile
   1api switch <tool> <p>   apply a saved profile (backs up current first)
