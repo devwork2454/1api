@@ -199,10 +199,11 @@ func TestOpenCodeApplyAuthSyncsOmo(t *testing.T) {
 }`)
 	c := Find("opencode")
 	if err := c.ApplyAuth(AuthSpec{
-		Endpoint:  "https://proxy.example/v1",
-		Key:       "sk-omo",
-		Model:     "mid",
-		AllModels: []string{"low", "mid", "high"},
+		Endpoint:   "https://proxy.example/v1",
+		Key:        "sk-omo",
+		Model:      "mid",
+		AllModels:  []string{"low", "mid", "high"},
+		SkipVerify: true,
 	}); err != nil {
 		t.Fatal(err)
 	}

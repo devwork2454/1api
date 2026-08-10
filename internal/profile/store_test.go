@@ -1189,9 +1189,10 @@ func TestOpenCodeSwitchOverwritesJSONCWithComments(t *testing.T) {
 
 	// Build target profile via ApplyAuth + Save (pure JSON after apply).
 	if err := tool.ApplyAuth(tools.AuthSpec{
-		Endpoint: "https://target.example/v1",
-		Key:      "sk-target",
-		Model:    "target-model",
+		Endpoint:   "https://target.example/v1",
+		Key:        "sk-target",
+		Model:      "target-model",
+		SkipVerify: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1295,17 +1296,19 @@ func TestOpenCodeSwitchRestoresTieredAgents(t *testing.T) {
 	}
 
 	if err := tool.ApplyAuth(tools.AuthSpec{
-		Endpoint:  "https://tier.example/v1",
-		Key:       "sk-tier",
-		Model:     "mid",
-		AllModels: []string{"low", "mid", "high"},
+		Endpoint:   "https://tier.example/v1",
+		Key:        "sk-tier",
+		Model:      "mid",
+		AllModels:  []string{"low", "mid", "high"},
+		SkipVerify: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SaveWithSpec(tool, "tiered", Spec{
-		Endpoint: "https://tier.example/v1",
-		Key:      "sk-tier",
-		Model:    "mid",
+		Endpoint:   "https://tier.example/v1",
+		Key:        "sk-tier",
+		Model:      "mid",
+		SkipVerify: true,
 	}); err != nil {
 		t.Fatal(err)
 	}

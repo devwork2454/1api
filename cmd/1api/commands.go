@@ -328,9 +328,106 @@ func cmdModels(args []string) error {
 	return nil
 }
 
+func cmdVerify(args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: 1api verify <tool> [--endpoint --key --model]")
+	}
+	t, err := requireTool(args[0])
+	if err != nil {
+		return err
+	}
+	fs := flag.NewFlagSet("verify", flag.ContinueOnError)
+	endpoint := fs.String("endpoint", "", "API base URL (default: live config)")
+	key := fs.String("key", "", "API key (default: live config)")
+	model := fs.String("model", "", "primary model id (default: live config)")
+	asJSON := fs.Bool("json", false, "machine-readable JSON output")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+
+	ep, k, primary := strings.TrimSpace(*endpoint), strings.TrimSpace(*key), strings.TrimSpace(*model)
+	if (ep == "" || k == "" || primary == "") && t.Describe != nil {
+		info, derr := t.Describe()
+		if derr != nil {
+			return derr
+		}
+		if ep == "" {
+			ep = info.Endpoint
+		}
+		if k == "" {
+			k = info.Secret
+		}
+		if primary == "" {
+			primary = info.Model
+		}
+	}
+	if strings.Contains(ep, "(default)") {
+		ep = t.DefaultEndpoint
+	}
+	if err := tools.ValidateEndpoint(ep); err != nil {
+		return err
+	}
+	if err := tools.ValidateKey(k); err != nil {
+		return err
+	}
+	ep = t.ResolveEndpoint(ep)
+
+	if t.Name == "opencode" {
+		tiers, reach, verr := tools.VerifyOpenCodeAuth(ep, k, primary, nil)
+		if verr != nil {
+			return verr
+		}
+		if *asJSON {
+			return printJSON(map[string]any{
+				"ok":        true,
+				"endpoint":  ep,
+				"primary":   primary,
+				"mid":       tiers.Mid,
+				"low":       tiers.Low,
+				"high":      tiers.High,
+				"reachable": len(reach),
+				"models":    reach,
+			})
+		}
+		fmt.Printf("OK  %s\n", t.Title)
+		fmt.Printf("  endpoint  %s\n", ep)
+		fmt.Printf("  mid       %s\n", tiers.Mid)
+		fmt.Printf("  low       %s\n", tiers.Low)
+		fmt.Printf("  high      %s\n", tiers.High)
+		fmt.Printf("  reachable %d model(s)\n", len(reach))
+		return nil
+	}
+
+	res, err := models.Probe(models.Provider(t.Provider), ep, k, models.ProbeOptions{
+		ChatModel: primary,
+		SkipChat:  primary == "",
+	})
+	if err != nil {
+		return err
+	}
+	if *asJSON {
+		return printJSON(map[string]any{
+			"ok":         true,
+			"endpoint":   ep,
+			"primary":    primary,
+			"chat_ok":    res.ChatOK,
+			"chat_model": res.ChatModel,
+			"reachable":  len(res.Models),
+			"models":     res.Models,
+		})
+	}
+	fmt.Printf("OK  %s\n", t.Title)
+	fmt.Printf("  endpoint  %s\n", ep)
+	fmt.Printf("  models    %d\n", len(res.Models))
+	if primary != "" {
+		fmt.Printf("  chat      %s (%v)\n", res.ChatModel, res.ChatOK)
+	}
+	return nil
+}
+
 func cmdAdd(store *profile.Store, args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: 1api add <tool> --name <p> --key <k> [--endpoint <url>] [--model <m>]")
+		return fmt.Errorf("usage: 1api add <tool> --name <p> --key <k> [--endpoint <url>] [--model <m>] [--no-verify]")
 	}
 	t, err := requireTool(args[0])
 	if err != nil {
@@ -341,6 +438,7 @@ func cmdAdd(store *profile.Store, args []string) error {
 	key := fs.String("key", "", "API key")
 	model := fs.String("model", "", "model id")
 	name := fs.String("name", "", "profile name")
+	noVerify := fs.Bool("no-verify", false, "skip live connectivity probe (OpenCode)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -357,7 +455,12 @@ func cmdAdd(store *profile.Store, args []string) error {
 		return err
 	}
 	ep := t.ResolveEndpoint(*endpoint)
-	if err := store.AddProfile(t, *name, profile.Spec{Endpoint: ep, Key: *key, Model: *model}); err != nil {
+	if err := store.AddProfile(t, *name, profile.Spec{
+		Endpoint:   ep,
+		Key:        *key,
+		Model:      *model,
+		SkipVerify: *noVerify,
+	}); err != nil {
 		return err
 	}
 	fmt.Printf("Added and activated %s profile %q (%s · %s)\n", t.Title, *name, ep, *model)
@@ -366,7 +469,7 @@ func cmdAdd(store *profile.Store, args []string) error {
 
 func cmdEdit(store *profile.Store, args []string) error {
 	if len(args) < 2 {
-		return fmt.Errorf("usage: 1api edit <tool> <profile> [--endpoint --key --model --name]")
+		return fmt.Errorf("usage: 1api edit <tool> <profile> [--endpoint --key --model --name] [--no-verify]")
 	}
 	t, err := requireTool(args[0])
 	if err != nil {
@@ -383,6 +486,7 @@ func cmdEdit(store *profile.Store, args []string) error {
 	key := fs.String("key", sp.Key, "API key")
 	model := fs.String("model", sp.Model, "model id")
 	newName := fs.String("name", "", "rename the profile")
+	noVerify := fs.Bool("no-verify", false, "skip live connectivity probe (OpenCode)")
 	if err := fs.Parse(args[2:]); err != nil {
 		return err
 	}
@@ -396,7 +500,12 @@ func cmdEdit(store *profile.Store, args []string) error {
 	if err := tools.ValidateEndpoint(*endpoint); err != nil {
 		return err
 	}
-	if err := store.EditProfile(t, name, target, profile.Spec{Endpoint: *endpoint, Key: *key, Model: *model}); err != nil {
+	if err := store.EditProfile(t, name, target, profile.Spec{
+		Endpoint:   *endpoint,
+		Key:        *key,
+		Model:      *model,
+		SkipVerify: *noVerify,
+	}); err != nil {
 		return err
 	}
 	fmt.Printf("Updated %s profile %q (%s · %s)\n", t.Title, target, t.ResolveEndpoint(*endpoint), *model)

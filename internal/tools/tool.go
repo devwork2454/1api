@@ -35,6 +35,9 @@ type AuthSpec struct {
 	Key       string
 	Model     string
 	AllModels []string // full fetched model list (e.g. TUI wizard's picker results); "" entries not included
+	// SkipVerify, when true, skips live connectivity + chat probe before write.
+	// Production callers leave it false. Tests that use fake endpoints set true.
+	SkipVerify bool
 }
 
 // Tool describes one AI CLI's auth surface and how to summarize/reconfigure it.

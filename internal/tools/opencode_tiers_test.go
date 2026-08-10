@@ -92,10 +92,11 @@ func TestOpenCodeApplyAuthTierRoutingLive(t *testing.T) {
 
 	c := Find("opencode")
 	err := c.ApplyAuth(AuthSpec{
-		Endpoint:  "https://proxy.example/v1",
-		Key:       "sk-tier",
-		Model:     "mid",
-		AllModels: []string{"low", "mid", "high"},
+		Endpoint:   "https://proxy.example/v1",
+		Key:        "sk-tier",
+		Model:      "mid",
+		AllModels:  []string{"low", "mid", "high"},
+		SkipVerify: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -175,10 +176,11 @@ func TestOpenCodeApplyAuthCreatesCompactionWhenMissing(t *testing.T) {
 
 	c := Find("opencode")
 	if err := c.ApplyAuth(AuthSpec{
-		Endpoint:  "https://x/v1",
-		Key:       "sk-x",
-		Model:     "mid",
-		AllModels: []string{"low", "mid", "high"},
+		Endpoint:   "https://x/v1",
+		Key:        "sk-x",
+		Model:      "mid",
+		AllModels:  []string{"low", "mid", "high"},
+		SkipVerify: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -197,5 +199,37 @@ func TestOpenCodeApplyAuthCreatesCompactionWhenMissing(t *testing.T) {
 	}
 	if cfg.Agent["compaction"].Model != "1api/low" {
 		t.Errorf("auto compaction = %#v", cfg.Agent)
+	}
+}
+
+func TestResolveOpenCodeTiersCapabilityHints(t *testing.T) {
+	got := resolveOpenCodeTiers("gpt-main", []string{"gpt-4o-mini", "gpt-main", "claude-opus-4"})
+	if got.Low != "gpt-4o-mini" {
+		t.Errorf("low = %q", got.Low)
+	}
+	if got.Mid != "gpt-main" {
+		t.Errorf("mid = %q", got.Mid)
+	}
+	if got.High != "claude-opus-4" {
+		t.Errorf("high = %q", got.High)
+	}
+}
+
+func TestModelNameTierHint(t *testing.T) {
+	cases := map[string]opencodeTier{
+		"gpt-4o-mini":    tierLow,
+		"gemini-flash":   tierLow,
+		"claude-haiku":   tierLow,
+		"o1-mini":        tierLow,
+		"claude-opus-4":  tierHigh,
+		"deepseek-r1":    tierHigh,
+		"gpt-5-pro":      tierHigh,
+		"mid":            tierMid,
+		"some-random-id": "",
+	}
+	for id, want := range cases {
+		if got := modelNameTierHint(id); got != want {
+			t.Errorf("modelNameTierHint(%q) = %q, want %q", id, got, want)
+		}
 	}
 }

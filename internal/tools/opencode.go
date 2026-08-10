@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -95,7 +96,21 @@ func newOpenCode() *Tool {
 				if !slices.Contains(ids, a.Model) {
 					ids = append(ids, a.Model)
 				}
-				tiers := resolveOpenCodeTiers(a.Model, ids)
+				var tiers opencodeTierModels
+				if a.SkipVerify {
+					tiers = resolveOpenCodeTiers(a.Model, ids)
+				} else {
+					// Live list + chat smoke on mid before we rewrite OpenCode/omo.
+					var reach []string
+					var verr error
+					tiers, reach, verr = VerifyOpenCodeAuth(a.Endpoint, a.Key, a.Model, ids)
+					if verr != nil {
+						return fmt.Errorf("verify endpoint before apply: %w", verr)
+					}
+					if len(reach) > 0 {
+						ids = reach
+					}
+				}
 				for _, id := range []string{tiers.Mid, tiers.Low, tiers.High} {
 					if id != "" && !slices.Contains(ids, id) {
 						ids = append(ids, id)

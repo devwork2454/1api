@@ -107,7 +107,13 @@ func (s *Store) AddProfile(t *tools.Tool, name string, spec Spec, allModels ...s
 			return fmt.Errorf("backup failed, aborting: %w", err)
 		}
 	}
-	if err := t.ApplyAuth(tools.AuthSpec{Endpoint: spec.Endpoint, Key: spec.Key, Model: spec.Model, AllModels: allModels}); err != nil {
+	if err := t.ApplyAuth(tools.AuthSpec{
+		Endpoint:   spec.Endpoint,
+		Key:        spec.Key,
+		Model:      spec.Model,
+		AllModels:  allModels,
+		SkipVerify: spec.SkipVerify,
+	}); err != nil {
 		return err
 	}
 	if err := s.SaveWithSpec(t, name, spec); err != nil {
@@ -146,7 +152,13 @@ func (s *Store) EditProfile(t *tools.Tool, oldName, newName string, spec Spec, a
 				return fmt.Errorf("backup failed, aborting: %w", err)
 			}
 		}
-		if err := t.ApplyAuth(tools.AuthSpec{Endpoint: spec.Endpoint, Key: spec.Key, Model: spec.Model, AllModels: allModels}); err != nil {
+		if err := t.ApplyAuth(tools.AuthSpec{
+			Endpoint:   spec.Endpoint,
+			Key:        spec.Key,
+			Model:      spec.Model,
+			AllModels:  allModels,
+			SkipVerify: spec.SkipVerify,
+		}); err != nil {
 			return err
 		}
 		return snapshot(t, s.profDir(t.Name, DefaultName), "Default (auto-captured custom provider)", "", "", "", &spec)

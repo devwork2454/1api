@@ -78,6 +78,8 @@ func run(args []string) error {
 		return cmdRefresh(store, args[1:])
 	case "models":
 		return cmdModels(args[1:])
+	case "verify":
+		return cmdVerify(args[1:])
 	case "add":
 		return cmdAdd(store, args[1:])
 	case "edit":
@@ -116,8 +118,12 @@ Usage:
                              (omit name to auto-name after the logged-in account)
   1api refresh <tool>      capture in-session changes (model, effort) into active profile
   1api models <tool>       list models from an API (--key, --endpoint)
+  1api verify <tool>       probe live endpoint (list + chat) and show mid/low/high
+                             (--key --endpoint --model; defaults from live config)
   1api add <tool>          add+activate a profile (--name --key [--endpoint --model])
+                             OpenCode verifies connectivity before write; --no-verify to skip
   1api edit <tool> <p>     change a profile's endpoint/key/model/name
+                             OpenCode verifies connectivity before write; --no-verify to skip
   1api rename <tool> <o> <n>  rename a saved profile
   1api cp <tool> <src> <dst>  duplicate a saved profile
   1api switch <tool> <p>   apply a saved profile (backs up current first)

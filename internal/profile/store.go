@@ -30,6 +30,8 @@ type Spec struct {
 	Endpoint string `json:"endpoint,omitempty"`
 	Key      string `json:"key,omitempty"`
 	Model    string `json:"model,omitempty"`
+	// SkipVerify is request-only (not persisted): skip OpenCode live probe on apply.
+	SkipVerify bool `json:"-"`
 }
 
 // Manifest records a stored profile's metadata and which artifacts it contained

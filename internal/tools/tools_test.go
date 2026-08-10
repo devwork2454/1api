@@ -54,7 +54,7 @@ func TestCodexDescribeAndApply(t *testing.T) {
 		t.Errorf("authMode = %q, want oauth", info.AuthMode)
 	}
 
-	err := c.ApplyAuth(AuthSpec{Endpoint: "https://proxy/v1", Key: "sk-k123456789", Model: "gpt-5.5"})
+	err := c.ApplyAuth(AuthSpec{Endpoint: "https://proxy/v1", Key: "sk-k123456789", Model: "gpt-5.5", SkipVerify: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestCodexPinsClaudeContextWindow(t *testing.T) {
 
 	// A Claude model routed through the custom provider gets its window pinned
 	// so Codex stops overrunning it with the 272K fallback.
-	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://gw/v1", Key: "sk-k123456789", Model: "claude-opus-4-7"}); err != nil {
+	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://gw/v1", Key: "sk-k123456789", Model: "claude-opus-4-7", SkipVerify: true}); err != nil {
 		t.Fatal(err)
 	}
 	if w, ok := window(); !ok || w != 200000 {
@@ -151,7 +151,7 @@ func TestCodexPinsClaudeContextWindow(t *testing.T) {
 	}
 
 	// Switching to a model Codex knows must drop the stale pin.
-	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://gw/v1", Key: "sk-k123456789", Model: "gpt-5.5"}); err != nil {
+	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://gw/v1", Key: "sk-k123456789", Model: "gpt-5.5", SkipVerify: true}); err != nil {
 		t.Fatal(err)
 	}
 	if w, ok := window(); ok {
@@ -166,7 +166,7 @@ func TestCodexKeepsUserProvider(t *testing.T) {
 		"[model_providers.myllm]\nname = \"mine\"\nbase_url = \"https://mine/v1\"\n")
 
 	c := Find("codex")
-	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://gw/v1", Key: "sk-k123456789", Model: "gpt-x"}); err != nil {
+	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://gw/v1", Key: "sk-k123456789", Model: "gpt-x", SkipVerify: true}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -196,7 +196,7 @@ func TestClaudeDescribeAndApply(t *testing.T) {
 	if !c.Detected() {
 		t.Fatal("claude should be detected via settings.json")
 	}
-	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://api.anthropic.com", Key: "sk-ant-123456789", Model: "claude-opus-4-8"}); err != nil {
+	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://api.anthropic.com", Key: "sk-ant-123456789", Model: "claude-opus-4-8", SkipVerify: true}); err != nil {
 		t.Fatal(err)
 	}
 	info, _ := c.Describe()
@@ -267,7 +267,7 @@ func TestClaudeApplyClearsStaleBaseURL(t *testing.T) {
 		`{"env":{"ANTHROPIC_BASE_URL":"https://gateway.example/v1","ANTHROPIC_AUTH_TOKEN":"sk-gw-old"}}`)
 
 	c := Find("claude")
-	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://api.anthropic.com", Key: "sk-ant-123456789"}); err != nil {
+	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://api.anthropic.com", Key: "sk-ant-123456789", SkipVerify: true}); err != nil {
 		t.Fatal(err)
 	}
 	var s struct {
@@ -292,7 +292,7 @@ func TestClaudeApplyApprovesAPIKey(t *testing.T) {
 		`{"customApiKeyResponses":{"approved":[],"disabled":["`+id+`"]}}`)
 
 	c := Find("claude")
-	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://api.anthropic.com", Key: key}); err != nil {
+	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://api.anthropic.com", Key: key, SkipVerify: true}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -327,7 +327,7 @@ func TestClaudeCustomEndpointUsesBearer(t *testing.T) {
 	writeFile(t, filepath.Join(home, ".claude", "settings.json"), `{}`)
 
 	c := Find("claude")
-	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://gateway.example/v1", Key: "sk-gw-123456789", Model: "some-model"}); err != nil {
+	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://gateway.example/v1", Key: "sk-gw-123456789", Model: "some-model", SkipVerify: true}); err != nil {
 		t.Fatal(err)
 	}
 	var s struct {
@@ -384,7 +384,7 @@ func TestClaudeApplyClearsStaleTopLevelModel(t *testing.T) {
 	writeFile(t, filepath.Join(home, ".claude", "settings.json"), `{"model":"opus"}`)
 
 	c := Find("claude")
-	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://gateway.example/v1", Key: "sk-gw-123456789", Model: "gateway-model"}); err != nil {
+	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://gateway.example/v1", Key: "sk-gw-123456789", Model: "gateway-model", SkipVerify: true}); err != nil {
 		t.Fatal(err)
 	}
 	var s struct {
@@ -410,7 +410,7 @@ func TestOpenCodeDescribeAndApply(t *testing.T) {
 	if !c.Detected() {
 		t.Fatal("opencode should be detected via auth.json")
 	}
-	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://openrouter.ai/api/v1", Key: "sk-or-123456789", Model: "x/y"}); err != nil {
+	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://openrouter.ai/api/v1", Key: "sk-or-123456789", Model: "x/y", SkipVerify: true}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -523,7 +523,7 @@ func TestOpenCodeAppliesModelRegistersIt(t *testing.T) {
 
 	c := Find("opencode")
 	// CLI add/edit path: AllModels is empty, only a.Model is set to a new id.
-	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://yunwu.ai", Key: "sk-new", Model: "grok-4.5"}); err != nil {
+	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://yunwu.ai", Key: "sk-new", Model: "grok-4.5", SkipVerify: true}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -562,7 +562,7 @@ func TestOpenCodeEditsExistingJsoncInPlace(t *testing.T) {
 	writeFile(t, jsonc, `{"$schema":"https://opencode.ai/config.json","provider":{"myllm":{"name":"mine"}}}`)
 
 	c := Find("opencode")
-	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://gw/v1", Key: "sk-abc", Model: "gpt-x"}); err != nil {
+	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://gw/v1", Key: "sk-abc", Model: "gpt-x", SkipVerify: true}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -634,10 +634,11 @@ func TestPiDescribeAndApply(t *testing.T) {
 		t.Fatal("pi should be detected via settings.json")
 	}
 	if err := c.ApplyAuth(AuthSpec{
-		Endpoint:  "https://openrouter.ai/api/v1",
-		Key:       "sk-or-123456789",
-		Model:     "x/y",
-		AllModels: []string{"x/y", "x/z"},
+		Endpoint:   "https://openrouter.ai/api/v1",
+		Key:        "sk-or-123456789",
+		Model:      "x/y",
+		AllModels:  []string{"x/y", "x/z"},
+		SkipVerify: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -676,7 +677,7 @@ func TestPiDescribeAndApply(t *testing.T) {
 
 	// A rename/key-rotation call without AllModels must preserve the previously
 	// registered model list rather than collapsing the /model picker to one entry.
-	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://openrouter.ai/api/v1", Key: "sk-or-999", Model: "x/y"}); err != nil {
+	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://openrouter.ai/api/v1", Key: "sk-or-999", Model: "x/y", SkipVerify: true}); err != nil {
 		t.Fatal(err)
 	}
 	data, _ = os.ReadFile(extensionPath)
@@ -728,7 +729,7 @@ func TestOpenCodeApplyAuthWithJSONCComments(t *testing.T) {
 }`)
 
 	c := Find("opencode")
-	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://new.example/v1", Key: "sk-new", Model: "fresh"}); err != nil {
+	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://new.example/v1", Key: "sk-new", Model: "fresh", SkipVerify: true}); err != nil {
 		t.Fatalf("ApplyAuth with JSONC comments: %v", err)
 	}
 
