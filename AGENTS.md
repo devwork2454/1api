@@ -25,6 +25,11 @@ account-backup profile — that file is never written or snapshotted.
 - Preserve the safety guarantees: **atomic writes** (temp file + rename),
   `0600` on credential files / `0700` on dirs, and an **auto-backup before every
   switch**. Don't regress these.
+- OpenCode `add`/`edit`/`switch`/`run` also **derive-patches** `~/.omo/omo.jsonc`
+  agent/category `model` fields (`1api/*` or `charon/*` only) from the live
+  opencode mid/low/high routing. Missing omo is a silent no-op — never create it
+  in tests against a real HOME; sandbox `$HOME` and optional fixture under
+  `$HOME/.omo/omo.jsonc` when covering this path.
 
 ## Commands
 
@@ -54,7 +59,7 @@ internal/tools/   per-tool adapters
   tool.go           Tool struct, AuthSpec, registry (All/Find)
   providers.go      guards for the shared "charon" provider entry (codex/opencode)
   edit.go           JSON/TOML load-merge-write helpers (preserve unknown keys)
-  codex.go / claude.go / opencode.go / pi.go   one file per tool
+  codex.go / claude.go / opencode.go / opencode_tiers.go / opencode_omo.go / pi.go
 internal/profile/ snapshot store, split by concern:
   store.go (layout/config/name validation) · snapshot.go (Save/Add/Edit/EnsureDefault)
   apply.go (Apply/Undo/Drift/refresh) · backup.go (backups + prune) · manage.go (rm/mv/cp)

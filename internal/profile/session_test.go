@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -88,6 +89,18 @@ func TestMaterializeSessionOpenCodePaths(t *testing.T) {
 	t.Setenv("HOME", liveHome)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(liveHome, ".config"))
 
+	hostOmo := filepath.Join(liveHome, ".omo", "omo.jsonc")
+	if err := os.MkdirAll(filepath.Dir(hostOmo), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(hostOmo, []byte(`{
+  "[opencode]": {
+    "agents": {"explore": {"model": "charon/stale"}, "sisyphus": {"model": "charon/stale"}}
+  }
+}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
 	s := newStore(t)
 	tool := tools.Find("opencode")
 	if tool == nil {
@@ -97,7 +110,7 @@ func TestMaterializeSessionOpenCodePaths(t *testing.T) {
 	if err := os.MkdirAll(prof, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	cfg := []byte(`{"model":"1api/gpt","provider":{"1api":{"options":{"baseURL":"https://x"}}}}`)
+	cfg := []byte(`{"model":"1api/gpt","provider":{"1api":{"models":{"gpt":{"name":"gpt"}},"options":{"baseURL":"https://x"}}}}`)
 	auth := []byte(`{}`)
 	if err := os.WriteFile(filepath.Join(prof, "opencode.jsonc"), cfg, 0o600); err != nil {
 		t.Fatal(err)
@@ -121,6 +134,22 @@ func TestMaterializeSessionOpenCodePaths(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(sandbox, ".local", "share", "opencode", "auth.json")); err != nil {
 		t.Fatalf("missing opencode auth in sandbox: %v", err)
+	}
+	sbOmo := filepath.Join(sandbox, ".omo", "omo.jsonc")
+	raw, err := os.ReadFile(sbOmo)
+	if err != nil {
+		t.Fatalf("sandbox omo missing: %v", err)
+	}
+	var root map[string]any
+	if err := json.Unmarshal(raw, &root); err != nil {
+		t.Fatal(err)
+	}
+	agents := root["[opencode]"].(map[string]any)["agents"].(map[string]any)
+	if agents["explore"].(map[string]any)["model"] != "1api/gpt" {
+		t.Errorf("sandbox explore model = %#v", agents["explore"])
+	}
+	if agents["sisyphus"].(map[string]any)["model"] != "1api/gpt" {
+		t.Errorf("sandbox sisyphus model = %#v", agents["sisyphus"])
 	}
 }
 
