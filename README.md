@@ -27,6 +27,9 @@ switching away and back is always clean and reversible.
   a single interactive menu or a scriptable CLI.
 - **Named profiles.** Snapshot each tool's full auth surface and hop between
   endpoints/keys instantly.
+- **Central providers.** Configure each external API (endpoint + key) **once**,
+  pick high/mid/low from reachable models, then bind any tool with
+  `1api use <tool> <provider>` — no re-entering credentials per CLI.
 - **Model discovery.** Add a profile from just an endpoint + key; Charon fetches
   the model list and lets you pick one.
 - **Safe by default.** Every switch is backed up first, writes are atomic, and an
@@ -117,7 +120,14 @@ switch, add, edit, or delete profiles. Quit any time with `ctrl+c`.
 1api save <tool> [name]    # snapshot current live config (omit name to use the logged-in account)
 1api models <tool>         # list chat-usable models (--key [--endpoint] [--no-probe])
 1api verify <tool>         # probe every model; show mid/low/high + usable set
-1api add    <tool>            # add + activate (--name --key [--endpoint --model] [--no-verify])
+1api provider ls           # list central providers (--json)
+1api provider add          # add provider once (--name --key [--endpoint --wire --model --low --high] [--no-verify])
+1api provider edit <n>     # edit provider tiers/endpoint/key [--no-verify]
+1api provider rm <n>       # delete a provider
+1api provider verify <n>   # re-probe usable models + refresh mid/low/high
+1api provider models <n>   # show usable set and tier assignment
+1api use <tool> <provider> # bind tool → provider and apply [--no-verify]
+1api add    <tool>            # add provider + bind tool (--name --key [--endpoint --model] [--no-verify])
 1api edit   <tool> <p>       # change endpoint/key/model (--name; OpenCode: [--no-verify])
 1api rename <tool> <o> <n> # rename a saved profile
 1api cp <tool> <src> <dst> # duplicate a saved profile
@@ -267,11 +277,15 @@ OpenCode profiles change:
 ## How it works
 
 - **Storage:** `~/.config/1api/` (`$XDG_CONFIG_HOME` respected).
+  - `providers/<name>/` — central API configs (`provider.json`: endpoint, key,
+    wire, mid/low/high, usable models). Configure once; bind tools with `use`.
   - `profiles/<tool>/<name>/` — snapshot files + `manifest.json`.
   - `backups/<tool>/<timestamp>/` — auto-backup taken before every switch, add,
     or undo. `1api undo` reverts to the newest; the last 10 per tool are kept
     (tune with `1api prune <tool> --keep N`).
-  - `config.json` — active profile per tool.
+  - `config.json` — active profile per tool, `toolProvider` bindings, migration flag.
+- **Migration:** On first run after upgrade, API-proxy profile specs are imported
+  into central providers (offline; marked stale until `provider verify` / `use`).
 - **`default`** is captured automatically the first time a detected tool is seen,
   so reverting is always possible and it is never overwritten.
 - Writes are **atomic** (temp file → `rename`), and credential files/dirs are

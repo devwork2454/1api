@@ -12,3 +12,6 @@ coverage.txt
 .DS_Store
 .idea/
 .vscode/
+
+# Local binary
+/1api

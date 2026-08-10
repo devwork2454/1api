@@ -75,6 +75,7 @@ golangci-lint on Linux + macOS; keep all of them green.
 cmd/1api/           CLI entrypoint (thin; no business logic)
   main.go           main, subcommand dispatch, usage
   commands.go       one cmd* func per subcommand + requireTool
+  provider_cmd.go   provider / use subcommands
 internal/artifact/  snapshot/restore primitives, no tool knowledge
   Artifact/Rotator/Merger/Peeker interfaces; FileArtifact,
   MergedFileArtifact, KeychainArtifact; AtomicWrite
@@ -83,24 +84,43 @@ internal/tools/   per-tool adapters
   providers.go      guards for managed provider "1api" (+ legacy "charon")
   edit.go           JSON/TOML load-merge-write helpers (preserve unknown keys)
   codex.go / claude.go / opencode.go / opencode_tiers.go / opencode_omo.go / pi.go
+internal/provider/  central external API configs (endpoint/key/tiers/usable)
 internal/profile/ snapshot store, split by concern:
   store.go (layout/config/name validation) · snapshot.go (Save/Add/Edit/EnsureDefault)
   apply.go (Apply/Undo/Drift/refresh) · backup.go (backups + prune) · manage.go (rm/mv/cp)
-  session.go (MaterializeSession for 1api run)
-internal/models/  fetch model lists from a provider API (openai/anthropic wire)
+  provider.go (migrate + ApplyProvider) · session.go (MaterializeSession for 1api run)
+internal/models/  fetch model lists + ResolveTiers + FilterReachable
 internal/jsonc/   strip comments for OpenCode/omo JSONC
 internal/secret/  masking + platform keychain (darwin vs. other build tags)
 internal/tui/     bubbletea interactive menu
 ```
 
-Layering (imports point left): `secret` ← `artifact` ← `tools` ← `profile` ← `cmd`/`tui`.
-Profile names are validated centrally in `internal/profile/store.go` (`validateName`);
+Layering (imports point left): `secret` ← `artifact` ← `tools`/`models` ← `provider` ← `profile` ← `cmd`/`tui`.
+Profile and provider names are validated centrally (`validateName` / provider sanitize);
 never join a user-supplied name into a path without it.
 
 Data lives under `~/.config/1api/` (`$XDG_CONFIG_HOME` respected):
+`providers/<name>/provider.json` (central endpoint+key+high/mid/low+usable),
 `profiles/<tool>/<name>/` (snapshot files + `manifest.json`),
-`backups/<tool>/<timestamp>/`, and `config.json` (active profile per tool).
+`backups/<tool>/<timestamp>/`, and `config.json` (active profile per tool,
+`toolProvider` bindings, `providersMigrated` flag).
 OpenCode oh-my models live separately at `~/.omo/omo.jsonc` (patched in place).
+
+### Central providers (do not regress)
+
+Implementation: `internal/provider` (CRUD + `FilterReachable` gates),
+`internal/profile/provider.go` (migrate + `ApplyProvider` + bind),
+CLI `provider` / `use`, TUI “Use provider…”.
+
+| Invariant | Detail |
+|-----------|--------|
+| Path | `$XDG_CONFIG_HOME/1api/providers/<name>/provider.json` only |
+| Once | External API credentials configured once; tools bind via `toolProvider` |
+| Tiers | mid/low/high from `models.ResolveTiers`; set only if id ∈ usable (or live probe) |
+| Verify | `provider add/edit` and `use` fail-closed unless `--no-verify` |
+| Migrate | On open: API-proxy profile Specs → providers (offline, `needsVerify`); OAuth untouched |
+| Compat | `1api add <tool>` upserts provider + binds tool + snapshots profile |
+| Safety | 0600 files, atomic write; never log raw keys |
 
 ### How to add a new tool
 
