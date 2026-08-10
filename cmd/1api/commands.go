@@ -546,11 +546,11 @@ func cmdUpdate() error {
 	cmd := exec.Command("sh", "-c", "curl -fsSL "+shellQuote(defaultUpdateInstallURL)+" | sh")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err == nil {
+	ghErr := cmd.Run()
+	if ghErr == nil {
 		return nil
-	} else {
-		fmt.Printf("GitHub update failed: %v\nTrying Gitee mirror %s …\n", err, giteeOwnerRepo)
 	}
+	fmt.Printf("GitHub update failed: %v\nTrying Gitee mirror %s …\n", ghErr, giteeOwnerRepo)
 
 	// #nosec G204 -- fixed Gitee API + release download hosts.
 	cmd = exec.Command("sh", "-c", giteeInstallFetchScript()+" | sh")
