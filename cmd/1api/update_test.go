@@ -5,14 +5,15 @@ import (
 	"testing"
 )
 
-func TestUpdateInstallURLDefaultIsFork(t *testing.T) {
+func TestUpdateInstallURLDefaultIsGitee(t *testing.T) {
 	t.Setenv("CHARON_UPDATE_URL", "")
-	// Clear may not empty if unset; force empty then check default.
-	// t.Setenv with empty still sets empty string which our code treats as override if TrimSpace != "".
-	// So only unset via empty: our updateInstallURL uses TrimSpace empty → default.
+	// t.Setenv with empty → TrimSpace empty → default Gitee path.
 	got := updateInstallURL()
-	if !strings.Contains(got, "devwork2454/1api") {
-		t.Errorf("default update URL = %q, want fork devwork2454", got)
+	if !strings.Contains(got, "gitee.com") {
+		t.Errorf("default update URL = %q, want gitee.com", got)
+	}
+	if !strings.Contains(got, "wbff/1api") {
+		t.Errorf("default update URL = %q, want Gitee wbff/1api", got)
 	}
 	if strings.Contains(got, "mingtheanlay") {
 		t.Errorf("default must not use upstream mingtheanlay: %q", got)

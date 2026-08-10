@@ -150,7 +150,7 @@ Usage:
   1api prune <tool>        delete old backups, keeping the newest (--keep N)
   1api rm <tool> <p>       delete a saved profile
   1api completion <shell>  print a bash/zsh/fish completion script
-  1api update              upgrade from this fork's GitHub releases
+  1api update              upgrade from Gitee releases (GitHub fallback)
                              (override URL with CHARON_UPDATE_URL)
   1api uninstall           remove the installed 1api binary
 

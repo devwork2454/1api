@@ -644,37 +644,41 @@ func cmdUninstall() error {
 }
 
 const (
-	defaultUpdateInstallURL = "https://github.com/devwork2454/1api/releases/latest/download/install.sh"
-	// Gitee has no stable /latest/download redirect; resolve tag via API first.
+	// Gitee is the default update source (China-reachable). No stable
+	// /latest/download redirect — resolve tag via API first.
 	giteeOwnerRepo       = "wbff/1api"
 	giteeReleasesAPI     = "https://gitee.com/api/v5/repos/" + giteeOwnerRepo + "/releases/latest"
 	giteeReleaseDownload = "https://gitee.com/" + giteeOwnerRepo + "/releases/download"
+	// GitHub kept as optional fallback only (often times out from CN).
+	githubUpdateInstallURL = "https://github.com/devwork2454/1api/releases/latest/download/install.sh"
 )
 
-// updateInstallURL returns the primary install.sh URL for `1api update`.
+// updateInstallURL returns a human-readable primary update source label/URL.
 // Override with CHARON_UPDATE_URL for mirrors or local testing.
 func updateInstallURL() string {
 	if u := strings.TrimSpace(os.Getenv("CHARON_UPDATE_URL")); u != "" {
 		return u
 	}
-	return defaultUpdateInstallURL
+	return giteeReleaseDownload + "/<latest>/install.sh"
 }
 
 // giteeInstallFetchScript is a POSIX fragment: resolve latest Gitee release tag
 // and curl that tag's install.sh. Gitee does not reliably support GitHub-style
 // .../releases/latest/download/install.sh.
+// curl uses short connect timeouts so a dead host fails fast.
 func giteeInstallFetchScript() string {
 	// sed extracts "tag_name":"v…" without jq; fails closed if missing.
-	return `tag=$(curl -fsSL ` + shellQuote(giteeReleasesAPI) + ` | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1) && ` +
-		`test -n "$tag" && curl -fsSL ` + shellQuote(giteeReleaseDownload) + `/"$tag"/install.sh`
+	curl := "curl -fsSL --connect-timeout 10 --max-time 120"
+	return `tag=$(` + curl + ` ` + shellQuote(giteeReleasesAPI) + ` | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1) && ` +
+		`test -n "$tag" && ` + curl + ` ` + shellQuote(giteeReleaseDownload) + `/"$tag"/install.sh`
 }
 
-// cmdUpdate upgrades the binary via online install.sh: GitHub first, then Gitee.
+// cmdUpdate upgrades the binary via online install.sh: Gitee first, then GitHub.
 func cmdUpdate() error {
 	if u := strings.TrimSpace(os.Getenv("CHARON_UPDATE_URL")); u != "" {
 		fmt.Printf("Checking for updates and upgrading 1api from\n  %s\n", u)
 		// #nosec G204 -- explicit operator override.
-		cmd := exec.Command("sh", "-c", "curl -fsSL "+shellQuote(u)+" | sh")
+		cmd := exec.Command("sh", "-c", "curl -fsSL --connect-timeout 15 --max-time 300 "+shellQuote(u)+" | sh")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
@@ -683,23 +687,23 @@ func cmdUpdate() error {
 		return nil
 	}
 
-	fmt.Printf("Checking for updates and upgrading 1api from\n  %s\n", defaultUpdateInstallURL)
-	// #nosec G204 -- fixed GitHub release URL.
-	cmd := exec.Command("sh", "-c", "curl -fsSL "+shellQuote(defaultUpdateInstallURL)+" | sh")
+	fmt.Printf("Checking for updates and upgrading 1api from Gitee %s …\n", giteeOwnerRepo)
+	// #nosec G204 -- fixed Gitee API + release download hosts.
+	cmd := exec.Command("sh", "-c", giteeInstallFetchScript()+" | sh")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	ghErr := cmd.Run()
-	if ghErr == nil {
+	giteeErr := cmd.Run()
+	if giteeErr == nil {
 		return nil
 	}
-	fmt.Printf("GitHub update failed: %v\nTrying Gitee mirror %s …\n", ghErr, giteeOwnerRepo)
+	fmt.Printf("Gitee update failed: %v\nTrying GitHub %s …\n", giteeErr, githubUpdateInstallURL)
 
-	// #nosec G204 -- fixed Gitee API + release download hosts.
-	cmd = exec.Command("sh", "-c", giteeInstallFetchScript()+" | sh")
+	// #nosec G204 -- fixed GitHub release URL (fallback).
+	cmd = exec.Command("sh", "-c", "curl -fsSL --connect-timeout 15 --max-time 300 "+shellQuote(githubUpdateInstallURL)+" | sh")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("update failed on GitHub and Gitee: %w", err)
+		return fmt.Errorf("update failed on Gitee and GitHub: %w", err)
 	}
 	return nil
 }
