@@ -31,12 +31,12 @@ func (i Info) withDefaults(endpoint string) Info {
 
 // AuthSpec is a new endpoint + API key + model to write into a tool's config.
 type AuthSpec struct {
-	Endpoint  string
-	Key       string
-	Model     string
-	AllModels []string // full fetched model list (e.g. TUI wizard's picker results); "" entries not included
-	// SkipVerify, when true, skips live connectivity + chat probe before write.
-	// Production callers leave it false. Tests that use fake endpoints set true.
+	Endpoint   string
+	Key        string
+	Model      string
+	Low        string
+	High       string
+	AllModels  []string
 	SkipVerify bool
 }
 

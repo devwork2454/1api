@@ -100,7 +100,6 @@ func newOpenCode() *Tool {
 				if a.SkipVerify {
 					tiers = resolveOpenCodeTiers(a.Model, ids)
 				} else {
-					// Live list + chat smoke on mid before we rewrite OpenCode/omo.
 					var reach []string
 					var verr error
 					mt, reach, verr := VerifyOpenCodeAuth(a.Endpoint, a.Key, a.Model, ids)
@@ -111,6 +110,15 @@ func newOpenCode() *Tool {
 					if len(reach) > 0 {
 						ids = reach
 					}
+				}
+				if a.Low != "" {
+					tiers.Low = a.Low
+				}
+				if a.High != "" {
+					tiers.High = a.High
+				}
+				if a.Model != "" {
+					tiers.Mid = a.Model
 				}
 				for _, id := range []string{tiers.Mid, tiers.Low, tiers.High} {
 					if id != "" && !slices.Contains(ids, id) {
