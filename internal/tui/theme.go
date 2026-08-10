@@ -12,8 +12,8 @@ import (
 // The TUI mostly respects the terminal's own theme — plain text renders in the
 // default foreground, and hints/dividers come from the standard ANSI palette.
 // The brand teal is reserved for the few spots that should always read as
-// "1API", regardless of terminal scheme: the header bar, the selected row,
-// focused input, and the banner wordmark.
+// "ONE API", regardless of terminal scheme: the header bar, the selected row,
+// focused input, and the menu title line.
 var (
 	colorBrand  = lipgloss.Color("#377375")                                 // brand teal — header fill, selection
 	colorOnDark = lipgloss.Color("#e8f2f1")                                 // text on the colorBrand fill

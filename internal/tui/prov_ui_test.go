@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	"1api/internal/profile"
@@ -73,5 +74,18 @@ func TestTrDefaultZH(t *testing.T) {
 	}
 	if tr(profile.LangZH, msgProviders) != "供应商" {
 		t.Fatalf("zh = %q", tr(profile.LangZH, msgProviders))
+	}
+}
+
+func TestBannerIsONEAPI(t *testing.T) {
+	got := banner("1.2.3")
+	if !strings.Contains(got, "ONE API") {
+		t.Fatalf("banner missing ONE API: %q", got)
+	}
+	if !strings.Contains(got, "v1.2.3") {
+		t.Fatalf("banner missing version: %q", got)
+	}
+	if strings.Contains(got, "CHARON") || strings.Contains(got, "█") {
+		t.Fatalf("banner still has art/CHARON: %q", got)
 	}
 }
