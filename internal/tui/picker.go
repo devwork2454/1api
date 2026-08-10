@@ -28,20 +28,21 @@ type minLoadElapsedMsg struct{}
 
 func fetchModelsCmd(provider, endpoint, key string) tea.Cmd {
 	return func() tea.Msg {
-		l, err := models.Fetch(models.Provider(provider), endpoint, key)
+		// Only models that pass a 1-token chat probe are shown.
+		l, err := models.FilterReachable(models.Provider(provider), endpoint, key, models.FilterOptions{})
 		return fetchedMsg{list: l, err: err}
 	}
 }
 
 // loadingMessages are playful lines shown while fetching, one picked at random per fetch.
 var loadingMessages = []string{
-	"fetching models, almost there…",
+	"probing models, almost there…",
 	"ferrying your request across the Styx…",
-	"summoning the model list…",
+	"checking which models answer…",
 	"asking the endpoint nicely…",
 	"warming up the engines…",
 	"charting the crossing…",
-	"counting the models…",
+	"pinging each model…",
 	"reticulating splines…",
 	"the ferry is departing, hold tight…",
 	"hang on, nearly across…",
@@ -64,27 +65,32 @@ func (m *model) beginFetch() tea.Cmd {
 // applyFetched moves to the model picker on success, or recovers gracefully on error.
 func (m model) applyFetched(msg fetchedMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
+		errMsg := msg.err.Error()
 		if m.fromForm {
 			// Stay on the edit form; keep the existing model value.
 			m.fromForm = false
-			m.setStatus(statusErr, msg.err.Error())
+			m.setStatus(statusErr, errMsg)
 			m.view = viewEditForm
 			m.loadEditForm()
 			return m, nil
 		}
-		// Model list unavailable; proceed without a model override.
+		// No usable models (or list failed); proceed without a model override.
 		m.wiz.model = ""
 		if m.wiz.edit {
-			m.setStatus(statusErr, msg.err.Error())
+			m.setStatus(statusErr, errMsg)
 			return m.finishAdd(m.wiz.name)
 		}
-		m.setStatus(statusErr, msg.err.Error()+" — you can name it without a model")
+		m.setStatus(statusErr, errMsg+" — you can name it without a model")
 		m.view = viewAddName
 		m.startInput("profile name", false)
 		return m, textinput.Blink
 	}
+	if len(msg.list) == 0 {
+		// Defensive: FilterReachable should already error with 暂无可用模型.
+		return m.applyFetched(fetchedMsg{err: models.ErrNoUsableModels})
+	}
 	m.view = viewPickModel
-	m.setStatus(statusInfo, fmt.Sprintf("%d models found", len(msg.list)))
+	m.setStatus(statusInfo, fmt.Sprintf("%d usable model(s)", len(msg.list)))
 	m.showModels(msg.list)
 	return m, nil
 }

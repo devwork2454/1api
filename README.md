@@ -37,9 +37,9 @@ switching away and back is always clean and reversible.
   also realigns `~/.omo/omo.jsonc` agent/category `model` fields to the same
   mid/low/high routing (only `1api/*` and legacy `charon/*` refs). Missing omo is
   a silent no-op.
-- **Verify before write (OpenCode).** `add`/`edit` probe the endpoint (model list
-  + chat smoke on mid) and classify mid/low/high from live ids before rewriting
-  config/omo. Use `--no-verify` to skip; `1api verify opencode` checks without writing.
+- **Only usable models.** Lists and OpenCode apply keep models that pass a 1-token
+  chat probe (parallel). Unreachable ids are hidden; if none work → `暂无可用模型`.
+  `add`/`edit` fail closed; `--no-verify` / `models --no-probe` skip probes.
 
 ## Supported tools
 
@@ -115,8 +115,8 @@ switch, add, edit, or delete profiles. Quit any time with `ctrl+c`.
 1api status                # show each tool's active profile, endpoint, and auth (--json)
 1api ls <tool>             # list saved profiles (--json)
 1api save <tool> [name]    # snapshot current live config (omit name to use the logged-in account)
-1api models <tool>         # list models offered by an API (--key [--endpoint])
-1api verify <tool>         # probe list + chat; show mid/low/high (OpenCode)
+1api models <tool>         # list chat-usable models (--key [--endpoint] [--no-probe])
+1api verify <tool>         # probe every model; show mid/low/high + usable set
 1api add    <tool>            # add + activate (--name --key [--endpoint --model] [--no-verify])
 1api edit   <tool> <p>       # change endpoint/key/model (--name; OpenCode: [--no-verify])
 1api rename <tool> <o> <n> # rename a saved profile

@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -8,8 +9,8 @@ import (
 	"1api/internal/models"
 )
 
-// VerifyOpenCodeAuth checks endpoint+key connectivity, intersects candidates with
-// the live catalog, classifies mid/low/high, and smoke-tests chat on the mid model.
+// VerifyOpenCodeAuth lists the endpoint, keeps only chat-reachable models,
+// classifies mid/low/high from that set, and requires at least one usable model.
 // Empty key skips the network and returns name-only tiers from candidates.
 func VerifyOpenCodeAuth(endpoint, key, primary string, candidates []string) (tiers opencodeTierModels, reachable []string, err error) {
 	primary = strings.TrimSpace(primary)
@@ -19,41 +20,28 @@ func VerifyOpenCodeAuth(endpoint, key, primary string, candidates []string) (tie
 		return resolveOpenCodeTiers(primary, candidates), candidates, nil
 	}
 
-	list, err := models.Probe(models.OpenAI, endpoint, key, models.ProbeOptions{
-		Timeout:  25 * time.Second,
-		SkipChat: true,
+	reachable, err = models.FilterReachable(models.OpenAI, endpoint, key, models.FilterOptions{
+		Timeout:         90 * time.Second,
+		PerModelTimeout: 12 * time.Second,
+		Concurrency:     6,
+		Candidates:      candidates,
 	})
 	if err != nil {
+		if errors.Is(err, models.ErrNoUsableModels) {
+			return opencodeTierModels{}, nil, models.ErrNoUsableModels
+		}
 		return opencodeTierModels{}, nil, err
 	}
-	reachable = list.Models
-	if len(candidates) > 0 {
-		reachable = intersectModels(candidates, list.Models)
-		if len(reachable) == 0 {
-			return opencodeTierModels{}, list.Models, fmt.Errorf(
-				"none of the selected models are on the live endpoint (live has %d)", len(list.Models))
-		}
-	}
 	if primary != "" && !containsString(reachable, primary) {
-		if containsString(list.Models, primary) {
-			reachable = append([]string{primary}, reachable...)
-		} else {
-			return opencodeTierModels{}, reachable, fmt.Errorf(
-				"primary model %q not offered by endpoint", primary)
-		}
+		return opencodeTierModels{}, reachable, fmt.Errorf(
+			"primary model %q is not usable (not listed or chat failed); usable: %d", primary, len(reachable))
 	}
-	if primary == "" && len(reachable) > 0 {
+	if primary == "" {
 		primary = resolveOpenCodeTiers("", reachable).Mid
 	}
 	tiers = resolveOpenCodeTiers(primary, reachable)
 	if tiers.Mid == "" {
-		return tiers, reachable, fmt.Errorf("could not resolve a mid model from live list")
-	}
-	if _, err := models.Probe(models.OpenAI, endpoint, key, models.ProbeOptions{
-		Timeout:   25 * time.Second,
-		ChatModel: tiers.Mid,
-	}); err != nil {
-		return tiers, reachable, fmt.Errorf("mid model %q not usable: %w", tiers.Mid, err)
+		return tiers, reachable, models.ErrNoUsableModels
 	}
 	return tiers, reachable, nil
 }
@@ -71,20 +59,6 @@ func cleanModelIDs(ids []string) []string {
 		}
 		seen[id] = struct{}{}
 		out = append(out, id)
-	}
-	return out
-}
-
-func intersectModels(want, live []string) []string {
-	set := map[string]struct{}{}
-	for _, id := range live {
-		set[id] = struct{}{}
-	}
-	var out []string
-	for _, id := range want {
-		if _, ok := set[id]; ok {
-			out = append(out, id)
-		}
 	}
 	return out
 }

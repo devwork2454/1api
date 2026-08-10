@@ -300,7 +300,7 @@ func cmdPrune(store *profile.Store, args []string) error {
 
 func cmdModels(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: 1api models <tool> --key <key> [--endpoint <url>]")
+		return fmt.Errorf("usage: 1api models <tool> --key <key> [--endpoint <url>] [--no-probe]")
 	}
 	t, err := requireTool(args[0])
 	if err != nil {
@@ -309,6 +309,7 @@ func cmdModels(args []string) error {
 	fs := flag.NewFlagSet("models", flag.ContinueOnError)
 	endpoint := fs.String("endpoint", "", "API base URL")
 	key := fs.String("key", "", "API key")
+	noProbe := fs.Bool("no-probe", false, "list only (skip per-model chat probe)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -318,7 +319,13 @@ func cmdModels(args []string) error {
 	if err := tools.ValidateEndpoint(*endpoint); err != nil {
 		return err
 	}
-	list, err := models.Fetch(models.Provider(t.Provider), t.ResolveEndpoint(*endpoint), *key)
+	ep := t.ResolveEndpoint(*endpoint)
+	var list []string
+	if *noProbe {
+		list, err = models.Fetch(models.Provider(t.Provider), ep, *key)
+	} else {
+		list, err = models.FilterReachable(models.Provider(t.Provider), ep, *key, models.FilterOptions{})
+	}
 	if err != nil {
 		return err
 	}
@@ -394,33 +401,43 @@ func cmdVerify(args []string) error {
 		fmt.Printf("  mid       %s\n", tiers.Mid)
 		fmt.Printf("  low       %s\n", tiers.Low)
 		fmt.Printf("  high      %s\n", tiers.High)
-		fmt.Printf("  reachable %d model(s)\n", len(reach))
+		fmt.Printf("  usable    %d model(s)\n", len(reach))
+		for _, id := range reach {
+			fmt.Printf("    %s\n", id)
+		}
 		return nil
 	}
 
-	res, err := models.Probe(models.Provider(t.Provider), ep, k, models.ProbeOptions{
-		ChatModel: primary,
-		SkipChat:  primary == "",
-	})
+	reach, err := models.FilterReachable(models.Provider(t.Provider), ep, k, models.FilterOptions{})
 	if err != nil {
 		return err
 	}
+	if primary != "" {
+		found := false
+		for _, id := range reach {
+			if id == primary {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("primary model %q is not usable", primary)
+		}
+	}
 	if *asJSON {
 		return printJSON(map[string]any{
-			"ok":         true,
-			"endpoint":   ep,
-			"primary":    primary,
-			"chat_ok":    res.ChatOK,
-			"chat_model": res.ChatModel,
-			"reachable":  len(res.Models),
-			"models":     res.Models,
+			"ok":        true,
+			"endpoint":  ep,
+			"primary":   primary,
+			"reachable": len(reach),
+			"models":    reach,
 		})
 	}
 	fmt.Printf("OK  %s\n", t.Title)
 	fmt.Printf("  endpoint  %s\n", ep)
-	fmt.Printf("  models    %d\n", len(res.Models))
-	if primary != "" {
-		fmt.Printf("  chat      %s (%v)\n", res.ChatModel, res.ChatOK)
+	fmt.Printf("  usable    %d model(s)\n", len(reach))
+	for _, id := range reach {
+		fmt.Printf("    %s\n", id)
 	}
 	return nil
 }

@@ -47,7 +47,7 @@ Implementation: `internal/tools/opencode_omo.go` (`SyncOpenCodeOmo` /
 | Rewrite set | Only empty / `1api/*` / legacy `charon/*` `model` strings under `"[opencode]".agents` and `.categories` |
 | Preserve | All non-model keys; foreign provider models (e.g. `openai/…`) |
 | Tiers | Reuse `resolveOpenCodeTiers` + `agentTierClass` / `categoryTierClass` |
-| Pre-write verify | OpenCode `ApplyAuth` (unless `AuthSpec.SkipVerify` / `--no-verify`): `models.Probe` list + chat on mid via `VerifyOpenCodeAuth`; fail closed (no config write) |
+| Pre-write verify | OpenCode `ApplyAuth` (unless `AuthSpec.SkipVerify` / `--no-verify`): `models.FilterReachable` (list + parallel chat per id) via `VerifyOpenCodeAuth`; only usable ids registered; all fail → `暂无可用模型`; fail closed |
 | Session | Copy host omo into sandbox HOME when absent, then patch from sandbox opencode config |
 | Tests | `opencode_omo_test.go`, `TestOpenCodeApplyAuthSyncsOmo`, `TestOpenCodeApplySyncsOmoModels`, session materialize assertions |
 
