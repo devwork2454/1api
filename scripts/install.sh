@@ -2,14 +2,17 @@
 # install.sh — download a prebuilt 1api binary and put it on your PATH.
 #
 # Quick install (Linux & macOS, no Go required):
+#   # preferred (Gitee; no GitHub connect wait from CN):
+#   VERSION=vX.Y.Z sh -c 'curl -fsSL "https://gitee.com/wbff/1api/releases/download/${VERSION}/install.sh" | sh'
+#   # or GitHub (may time out from CN):
 #   curl -fsSL https://github.com/devwork2454/1api/releases/latest/download/install.sh | sh
 #
-# Download order: GitHub releases first; if that fails, fall back to Gitee
-# (code mirror / release assets). Override with REPO / GITEE_REPO / VERSION.
+# Download order: Gitee first; if that fails, fall back to GitHub.
+# Override with REPO / GITEE_REPO / VERSION.
 #
 # Options (environment variables):
 #   REPO=owner/name       GitHub repo for release assets (default: devwork2454/1api)
-#   GITEE_REPO=owner/name Gitee mirror repo (default: same as REPO)
+#   GITEE_REPO=owner/name Gitee repo (default: wbff/1api)
 #   PREFIX=/usr/local     install under <PREFIX>/bin instead of ~/.local (may need sudo)
 #   VERSION=v1.2.3        install a specific release instead of the latest
 #
@@ -123,17 +126,15 @@ trap 'rm -rf "$tmp"' EXIT INT TERM
 
 info "Downloading $archive ($VERSION) ..."
 SOURCE=""
-if try_download "GitHub" "$(github_release_base)" "$tmp/$archive"; then
+# Gitee first (reachable from CN); GitHub only if Gitee fails.
+if gitee_base=$(gitee_release_base) && try_download "Gitee" "$gitee_base" "$tmp/$archive"; then
+  SOURCE=gitee
+  base=$gitee_base
+elif try_download "GitHub" "$(github_release_base)" "$tmp/$archive"; then
   SOURCE=github
   base=$(github_release_base)
 else
-  gitee_base=$(gitee_release_base) || die "GitHub failed and Gitee latest tag could not be resolved for $GITEE_REPO"
-  if try_download "Gitee" "$gitee_base" "$tmp/$archive"; then
-    SOURCE=gitee
-    base=$gitee_base
-  else
-    die "download failed on GitHub and Gitee — check that $REPO (and mirror $GITEE_REPO) have a release asset for this platform"
-  fi
+  die "download failed on Gitee and GitHub — check that $GITEE_REPO (and $REPO) have a release asset for this platform"
 fi
 info "Using release mirror: $SOURCE"
 
