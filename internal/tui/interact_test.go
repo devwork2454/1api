@@ -1,6 +1,9 @@
 package tui
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -74,15 +77,45 @@ func sandboxStore(t *testing.T) *profile.Store {
 
 func seedProvider(t *testing.T, s *profile.Store, name, ep, key, model string) {
 	t.Helper()
+	seedProviderModels(t, s, name, ep, key, model, nil)
+}
+
+func seedProviderModels(t *testing.T, s *profile.Store, name, ep, key, model string, usable []string) {
+	t.Helper()
 	ps, err := s.ProviderStore()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := ps.Upsert(provider.Spec{
-		Name: name, Endpoint: ep, Key: key, Model: model, SkipVerify: true,
+		Name: name, Endpoint: ep, Key: key, Model: model, Usable: usable, SkipVerify: true,
 	}, provider.UpsertOptions{SkipVerify: true}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func mockOpenAIServer(t *testing.T, ids ...string) *httptest.Server {
+	t.Helper()
+	if len(ids) == 0 {
+		ids = []string{"m1"}
+	}
+	data := make([]map[string]string, 0, len(ids))
+	for _, id := range ids {
+		data = append(data, map[string]string{"id": id})
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/models") && r.Method == http.MethodGet:
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": data})
+		case strings.Contains(r.URL.Path, "/chat/completions"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"choices": []map[string]any{{"message": map[string]string{"content": "ok"}}},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv
 }
 
 func mustApp(t *testing.T, m tea.Model) app {
@@ -255,7 +288,8 @@ func TestApp_DeleteUnusedProvider(t *testing.T) {
 func TestApp_BindTool_setsTiers(t *testing.T) {
 	s := sandboxStore(t)
 	home := os.Getenv("HOME")
-	seedProvider(t, s, "p1", "https://p1.example/v1", "sk-p1", "mid-m")
+	seedProviderModels(t, s, "p1", "https://p1.example/v1", "sk-p1", "mid-m",
+		[]string{"mid-m", "low-m", "high-m"})
 	ps, _ := s.ProviderStore()
 	if _, err := ps.SetTiers("p1", "mid-m", "low-m", "high-m", provider.UpsertOptions{SkipVerify: true}); err != nil {
 		t.Fatal(err)
@@ -341,6 +375,90 @@ func TestApp_Settings_langAndSkin(t *testing.T) {
 	a = mustApp(t, send(a, keyEnter()))
 	if s.UISkin() != profile.SkinWarm {
 		t.Fatalf("UISkin = %q", s.UISkin())
+	}
+}
+
+func TestApp_ModelPick_marksCurrent(t *testing.T) {
+	s := sandboxStore(t)
+	a := mustApp(t, resize(newApp(s, "vtest")))
+	a.allModels = []string{"alpha", "beta", "gamma"}
+	a.mid, a.low, a.high = "beta", "alpha", "gamma"
+	a.view = aViewPickMid
+	a.showModelPick(msgPickMid, false)
+	it, ok := a.list.SelectedItem().(item)
+	if !ok || it.value != "beta" || !it.active {
+		t.Fatalf("mid select = %+v ok=%v", it, ok)
+	}
+	if !strings.HasPrefix(it.title, "✓ ") {
+		t.Fatalf("title = %q, want ✓ prefix", it.title)
+	}
+	a.view = aViewPickLow
+	a.showModelPick(msgPickLow, true)
+	it, ok = a.list.SelectedItem().(item)
+	if !ok || it.value != "alpha" || !it.active {
+		t.Fatalf("low select = %+v", it)
+	}
+}
+
+func TestApp_EditProvider_keepsKeyAndUpdatesEndpoint(t *testing.T) {
+	s := sandboxStore(t)
+	home := os.Getenv("HOME")
+	srv := mockOpenAIServer(t, "m1", "m2")
+	newEP := srv.URL + "/v1"
+	seedProvider(t, s, "editme", "https://old.example/v1", "sk-old-key-123456", "m1")
+	tool := bindableTool(t, home)
+	if err := s.ApplyProvider(tool, "editme", true); err != nil {
+		t.Fatal(err)
+	}
+	a := mustApp(t, resize(newApp(s, "vtest")))
+	a.allTools = []*tools.Tool{tool}
+	selectValueApp(&a, aMenuProv)
+	a = mustApp(t, send(a, keyEnter()))
+	selectValueApp(&a, aProvPrefix+"editme")
+	a = mustApp(t, send(a, keyStr("e")))
+	if a.view != aViewEditEndpoint {
+		t.Fatalf("view = %v, want edit endpoint", a.view)
+	}
+	if a.input.Value() != "https://old.example/v1" {
+		t.Fatalf("endpoint prefill = %q", a.input.Value())
+	}
+	a.input.SetValue("")
+	a = mustApp(t, typeText(a, newEP))
+	a = mustApp(t, send(a, keyEnter()))
+	if a.view != aViewEditKey {
+		t.Fatalf("view = %v, want edit key", a.view)
+	}
+	a = mustApp(t, send(a, keyEnter()))
+	if a.view != aViewEditWire {
+		t.Fatalf("view = %v, want edit wire", a.view)
+	}
+	a = mustApp(t, send(a, keyEnter()))
+	if a.view != aViewProviders {
+		t.Fatalf("view = %v status=%q", a.view, a.status)
+	}
+	if a.statusLvl == statusErr {
+		t.Fatalf("edit failed: %q", a.status)
+	}
+	ps, err := s.ProviderStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := ps.Get("editme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Endpoint != newEP {
+		t.Fatalf("endpoint = %q want %q", r.Endpoint, newEP)
+	}
+	if r.Key != "sk-old-key-123456" {
+		t.Fatalf("key changed unexpectedly")
+	}
+	got, err := os.ReadFile(filepath.Join(home, "bind-tool.cfg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), newEP) {
+		t.Fatalf("bound tool not re-applied: %q", got)
 	}
 }
 
