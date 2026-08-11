@@ -58,12 +58,22 @@ const (
 	msgBusyVerify
 	msgSelectTool
 	msgUseCurrentTiers
+	msgKeyEdit
+	msgEditProvider
+	msgEditKeepKey
+	msgEdited
+	msgBusyEdit
 )
 
 var zh = map[msgID]string{
 	msgMainTitle:       "1API — 主菜单",
 	msgProviders:       "供应商",
-	msgProvidersDesc:   "列表 · 新增 · 删除未占用项",
+	msgProvidersDesc:   "列表 · 新增 · e 编辑 · d 删除未占用",
+	msgKeyEdit:         "e 编辑",
+	msgEditProvider:    "编辑供应商",
+	msgEditKeepKey:     "留空则保留原 Key",
+	msgEdited:          "已更新供应商 %s",
+	msgBusyEdit:        "正在保存供应商…",
 	msgBindings:        "工具绑定",
 	msgBindingsDesc:    "查看并切换各 CLI 绑定的供应商与模型档位",
 	msgSettings:        "设置",
@@ -119,7 +129,12 @@ var zh = map[msgID]string{
 var en = map[msgID]string{
 	msgMainTitle:       "1API — menu",
 	msgProviders:       "Providers",
-	msgProvidersDesc:   "List · add · delete unused",
+	msgProvidersDesc:   "List · add · e edit · d delete unused",
+	msgKeyEdit:         "e edit",
+	msgEditProvider:    "Edit provider",
+	msgEditKeepKey:     "blank keeps current key",
+	msgEdited:          "updated provider %s",
+	msgBusyEdit:        "saving provider…",
 	msgBindings:        "Tool bindings",
 	msgBindingsDesc:    "Bind CLIs to providers and set model tiers",
 	msgSettings:        "Settings",

@@ -38,6 +38,13 @@ type providerWiz struct {
 	endpoint, key, wire, name, model string
 }
 
+func markSelected(id, current string) (title string, active bool) {
+	if id != "" && id == current {
+		return "✓ " + id, true
+	}
+	return id, false
+}
+
 func orDash(s string) string {
 	if s == "" {
 		return "—"

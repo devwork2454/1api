@@ -17,6 +17,8 @@ const (
 	busyBindMulti
 	// busyFetchTiers: bind flow finished refreshing usable catalog.
 	busyFetchTiers
+	// busyEditProv: provider edit finished (upsert + optional re-apply).
+	busyEditProv
 )
 
 func runBusy(fn func() busyDoneMsg) tea.Cmd {

@@ -8,6 +8,7 @@ import (
 
 	"1api/internal/profile"
 	"1api/internal/provider"
+	"1api/internal/secret"
 	"1api/internal/tools"
 
 	"github.com/charmbracelet/bubbles/cursor"
@@ -38,6 +39,9 @@ const (
 	aViewPickHigh
 	aViewSetLang
 	aViewSetSkin
+	aViewEditEndpoint
+	aViewEditKey
+	aViewEditWire
 )
 
 const (
@@ -72,6 +76,8 @@ type app struct {
 	allModels      []string
 	modelFilter    string
 	delTarget      string
+	editName       string
+	editOrigKey    string
 
 	pending       *fetchedMsg
 	fetchStart    time.Time
@@ -133,21 +139,26 @@ func (m *app) resize() {
 	m.list.SetSize(m.width, h)
 }
 
-func (m *app) startInput(ph string, secret bool) {
-	m.input.SetValue("")
+func (m *app) startInput(ph string, secretMode bool) {
+	m.startInputValue(ph, "", secretMode)
+}
+
+func (m *app) startInputValue(ph, value string, secretMode bool) {
+	m.input.SetValue(value)
 	m.input.Placeholder = ph
-	if secret {
+	if secretMode {
 		m.input.EchoMode = textinput.EchoPassword
 		m.input.EchoCharacter = '•'
 	} else {
 		m.input.EchoMode = textinput.EchoNormal
 	}
+	m.input.CursorEnd()
 	m.input.Focus()
 }
 
 func (m *app) isInput() bool {
 	switch m.view {
-	case aViewAddEndpoint, aViewAddKey, aViewAddName:
+	case aViewAddEndpoint, aViewAddKey, aViewAddName, aViewEditEndpoint, aViewEditKey:
 		return true
 	}
 	return false
@@ -234,6 +245,7 @@ func (m *app) loadProviders() {
 	m.list.Title = m.t(msgProviders)
 	m.setHelp(
 		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", m.t(msgHelpChoose))),
+		key.NewBinding(key.WithKeys("e"), key.WithHelp("e", m.t(msgKeyEdit))),
 		key.NewBinding(key.WithKeys("d"), key.WithHelp("d", m.t(msgKeyDelete))),
 		key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", m.t(msgEscBack))),
 	)
@@ -316,13 +328,23 @@ func (m *app) loadSkinPicker() {
 
 func (m *app) loadWirePicker() {
 	items := []list.Item{
-		item{title: m.t(msgWireOpenAI), desc: "Bearer · /v1/models", value: aWireOpenAI},
-		item{title: m.t(msgWireAnthropic), desc: "x-api-key · Messages", value: aWireAnthropic},
+		item{title: m.t(msgWireOpenAI), desc: "Bearer · /v1/models", value: aWireOpenAI, active: m.wiz.wire == aWireOpenAI},
+		item{title: m.t(msgWireAnthropic), desc: "x-api-key · Messages", value: aWireAnthropic, active: m.wiz.wire == aWireAnthropic},
 	}
 	m.list.SetDelegate(themedDelegate())
 	m.list.SetItems(items)
-	m.list.Title = m.t(msgWire)
+	title := m.t(msgWire)
+	if m.view == aViewEditWire && m.editName != "" {
+		title = m.t(msgEditProvider) + " · " + m.editName + " · " + title
+	}
+	m.list.Title = title
 	m.setHelp(keyChoose, keyBack)
+	for i, raw := range items {
+		if it, ok := raw.(item); ok && it.value == m.wiz.wire {
+			m.list.Select(i)
+			break
+		}
+	}
 }
 
 func (m *app) loadProvidersForTool(toolName string) {
@@ -353,27 +375,57 @@ func (m *app) loadProvidersForTool(toolName string) {
 }
 
 func (m *app) showModelPick(titleID msgID, includeSame bool) {
+	current := m.currentTierModel()
 	filtered := filterModels(m.allModels, m.modelFilter)
 	items := make([]list.Item, 0, len(filtered)+3)
+	selIdx := -1
 	for _, id := range filtered {
-		items = append(items, item{title: id, value: id})
+		title, active := markSelected(id, current)
+		if active {
+			selIdx = len(items)
+		}
+		items = append(items, item{title: title, value: id, active: active})
 	}
 	if includeSame {
 		if len(items) > 0 {
 			items = append(items, item{value: sepSentinel})
 		}
-		items = append(items, item{title: m.t(msgSameAsMid), value: aSameAsMid})
+		sameActive := current != "" && current == m.mid && (m.view == aViewPickLow || m.view == aViewPickHigh)
+		sameTitle := m.t(msgSameAsMid)
+		if sameActive {
+			sameTitle = "✓ " + sameTitle
+			if selIdx < 0 {
+				selIdx = len(items)
+			}
+		}
+		items = append(items, item{title: sameTitle, value: aSameAsMid, active: sameActive})
 	}
 	if m.view == aViewPickProv || false {
 		_ = aUseTiers
 	}
 	m.list.SetDelegate(themedDelegate())
 	m.list.SetItems(items)
+	if selIdx >= 0 {
+		m.list.Select(selIdx)
+	}
 	m.list.Title = m.t(titleID)
 	if m.modelFilter != "" {
 		m.list.Title += " · " + m.modelFilter
 	}
 	m.setHelp(keyChoose, keyFilter, keyBack)
+}
+
+func (m *app) currentTierModel() string {
+	switch m.view {
+	case aViewPickMid:
+		return m.mid
+	case aViewPickLow:
+		return m.low
+	case aViewPickHigh:
+		return m.high
+	default:
+		return ""
+	}
 }
 
 func (m app) Init() tea.Cmd { return nil }
@@ -414,6 +466,11 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			return m.openTierPickFromCache()
+		case busyEditProv:
+			m.editName, m.editOrigKey = "", ""
+			m.wiz = providerWiz{}
+			m.view = aViewProviders
+			m.loadProviders()
 		default:
 			if m.view == aViewProviders {
 				m.loadProviders()
@@ -461,6 +518,12 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 			}
+		case "e":
+			if m.view == aViewProviders {
+				if it, ok := m.list.SelectedItem().(item); ok && strings.HasPrefix(it.value, aProvPrefix) {
+					return m.beginEditProvider(strings.TrimPrefix(it.value, aProvPrefix))
+				}
+			}
 		}
 	}
 	before := m.list.Index()
@@ -505,6 +568,12 @@ func (m app) onEsc() (tea.Model, tea.Cmd) {
 		return m, textinput.Blink
 	case aViewAddEndpoint, aViewAddKey, aViewAddName:
 		m.view = aViewProviders
+		m.wiz = providerWiz{}
+		m.setStatus(statusInfo, m.t(msgCancelled))
+		m.loadProviders()
+	case aViewEditEndpoint, aViewEditKey, aViewEditWire:
+		m.view = aViewProviders
+		m.editName, m.editOrigKey = "", ""
 		m.wiz = providerWiz{}
 		m.setStatus(statusInfo, m.t(msgCancelled))
 		m.loadProviders()
@@ -595,6 +664,9 @@ func (m app) onEnter() (tea.Model, tea.Cmd) {
 		m.view = aViewAddName
 		m.startInput(m.t(msgName), false)
 		return m, textinput.Blink
+	case aViewEditWire:
+		m.wiz.wire = it.value
+		return m.finishEdit()
 	case aViewPickModel:
 		if it.value == skipModel {
 			m.wiz.model = ""
@@ -790,7 +862,7 @@ func (m app) applyBindWithTiers() (tea.Model, tea.Cmd) {
 		if _, err := ps.SetTiers(provName, mid, low, high, provider.UpsertOptions{SkipVerify: true}); err != nil {
 			return busyDoneMsg{level: statusErr, text: err.Error(), kind: busyBind}
 		}
-		if err := store.ApplyProvider(tool, provName, true); err != nil {
+		if err := store.ApplyProvider(tool, provName, false); err != nil {
 			return busyDoneMsg{level: statusErr, text: err.Error(), kind: busyBind}
 		}
 		return busyDoneMsg{
@@ -798,6 +870,80 @@ func (m app) applyBindWithTiers() (tea.Model, tea.Cmd) {
 			text:  fmt.Sprintf(tr(store.UILang(), msgBoundOK), tool.Name, provName),
 			kind:  busyBind,
 		}
+	})
+}
+
+func (m app) beginEditProvider(name string) (tea.Model, tea.Cmd) {
+	ps, err := m.store.ProviderStore()
+	if err != nil {
+		m.setStatus(statusErr, err.Error())
+		return m, nil
+	}
+	r, err := ps.Get(name)
+	if err != nil {
+		m.setStatus(statusErr, err.Error())
+		return m, nil
+	}
+	m.editName = name
+	m.editOrigKey = r.Key
+	m.wiz = providerWiz{
+		endpoint: r.Endpoint,
+		key:      r.Key,
+		wire:     r.Wire,
+		name:     name,
+		model:    r.Mid,
+	}
+	m.view = aViewEditEndpoint
+	m.clearStatus()
+	m.startInputValue(m.t(msgEndpoint), r.Endpoint, false)
+	return m, textinput.Blink
+}
+
+func (m app) finishEdit() (tea.Model, tea.Cmd) {
+	name := m.editName
+	endpoint := m.wiz.endpoint
+	key := m.wiz.key
+	wire := m.wiz.wire
+	model := m.wiz.model
+	store := m.store
+	toolsAll := m.allTools
+	m.busy = true
+	m.spinner = newSpinner()
+	m.setStatus(statusInfo, m.t(msgBusyEdit))
+	return m, runBusy(func() busyDoneMsg {
+		ps, err := store.ProviderStore()
+		if err != nil {
+			return busyDoneMsg{level: statusErr, text: err.Error(), kind: busyEditProv}
+		}
+		r, err := ps.Upsert(provider.Spec{
+			Name: name, Endpoint: endpoint, Key: key, Wire: wire, Model: model,
+		}, provider.UpsertOptions{})
+		if err != nil {
+			return busyDoneMsg{level: statusErr, text: err.Error(), kind: busyEditProv}
+		}
+		var applied []string
+		for _, t := range toolsAll {
+			if store.ActiveProvider(t.Name) != name {
+				continue
+			}
+			if t.ApplyAuth == nil {
+				continue
+			}
+			if err := store.ApplyProvider(t, name, false); err != nil {
+				return busyDoneMsg{
+					level: statusErr,
+					text:  fmt.Sprintf("%s: %v", t.Name, err),
+					kind:  busyEditProv,
+				}
+			}
+			applied = append(applied, t.Name)
+		}
+		text := fmt.Sprintf(tr(store.UILang(), msgEdited), r.Name)
+		if len(applied) > 0 {
+			text += " · " + strings.Join(applied, ", ")
+		}
+		text += fmt.Sprintf(" · usable=%d", len(r.Usable))
+		return busyDoneMsg{level: statusOK, text: text, kind: busyEditProv}
 	})
 }
 
@@ -872,6 +1018,40 @@ func (m app) commitInput() (tea.Model, tea.Cmd) {
 		}
 		m.wiz.name = val
 		return m, m.beginFetch()
+	case aViewEditEndpoint:
+		if err := tools.ValidateEndpoint(val); err != nil {
+			m.setStatus(statusErr, err.Error())
+			return m, nil
+		}
+		m.wiz.endpoint = val
+		m.view = aViewEditKey
+		m.clearStatus()
+		ph := m.t(msgEditKeepKey)
+		if m.editOrigKey != "" {
+			ph = secret.Mask(m.editOrigKey) + " · " + m.t(msgEditKeepKey)
+		}
+		m.startInput(ph, true)
+		return m, textinput.Blink
+	case aViewEditKey:
+		if val == "" {
+			m.wiz.key = m.editOrigKey
+		} else {
+			if err := tools.ValidateKey(val); err != nil {
+				m.setStatus(statusErr, err.Error())
+				return m, nil
+			}
+			m.wiz.key = val
+		}
+		m.view = aViewEditWire
+		m.clearStatus()
+		m.loadWirePicker()
+		for i, raw := range m.list.Items() {
+			if it, ok := raw.(item); ok && it.value == m.wiz.wire {
+				m.list.Select(i)
+				break
+			}
+		}
+		return m, nil
 	}
 	return m, nil
 }
@@ -974,6 +1154,24 @@ func (m app) View() string {
 		}
 		body := "\n" + titleStyle.Render(m.t(msgAddProvider)) + "\n" +
 			stepStyle.Render(fmt.Sprintf(m.t(msgStepOf), step, 5, label)) + "\n\n" +
+			promptStyle.Render(label) + "\n\n  " + m.input.View() +
+			"\n\n" + hintStyle.Render(m.t(msgEnterContinue)+" · "+m.t(msgEscBack))
+		if line := statusRender(m.statusLvl, m.status); line != "" {
+			body += "\n" + line
+		}
+		return body
+	case aViewEditEndpoint, aViewEditKey:
+		step := 1
+		label := m.t(msgEndpoint)
+		if m.view == aViewEditKey {
+			step, label = 2, m.t(msgAPIKey)
+		}
+		title := m.t(msgEditProvider)
+		if m.editName != "" {
+			title += " · " + m.editName
+		}
+		body := "\n" + titleStyle.Render(title) + "\n" +
+			stepStyle.Render(fmt.Sprintf(m.t(msgStepOf), step, 3, label)) + "\n\n" +
 			promptStyle.Render(label) + "\n\n  " + m.input.View() +
 			"\n\n" + hintStyle.Render(m.t(msgEnterContinue)+" · "+m.t(msgEscBack))
 		if line := statusRender(m.statusLvl, m.status); line != "" {
