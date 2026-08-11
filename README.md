@@ -117,8 +117,8 @@ picker). Default language is **Chinese**; switch to English under Settings.
 
 | Menu | What it does |
 |------|----------------|
-| **供应商 / Providers** | List providers, add one (endpoint + key), delete with **`d`** only when no tool uses it |
-| **工具绑定 / Tool bindings** | Per-tool bound provider; pick a tool → provider → set **high / mid / low** models → apply |
+| **供应商 / Providers** | List providers, add one (endpoint + key), **`e`** edit endpoint/key/wire, **`d`** delete only when unused |
+| **工具绑定 / Tool bindings** | Per-tool bound provider; pick a tool → provider → set **high / mid / low** (type to search; current tier marked **✓**) → apply (OpenCode also syncs `~/.omo/omo.jsonc`) |
 | **设置 / Settings** | Language (`zh` / `en`) and skin (`teal` / `mono` / `warm`) |
 
 Navigation: **`esc`** goes back one screen; on the root menu it **quits**.
@@ -306,6 +306,15 @@ OpenCode profiles change:
   mode `0600`/`0700`.
 - **OpenCode omo:** not stored under `~/.config/1api/`; patched in place at
   `~/.omo/omo.jsonc` after apply/switch/run (see above).
+
+### Integrating other agents
+
+If you build on OpenCode, Pi (e.g. aiia), Codex, or Claude Code and need models
+to follow 1api without re-managing keys, see the agent-facing contract:
+
+**[docs/AGENT-1API-MODEL-INTEGRATION.md](docs/AGENT-1API-MODEL-INTEGRATION.md)**
+— tiers, per-tool config shapes, do/don’t rules, startup checks, and a
+copy-paste checklist for `AGENTS.md`.
 
 ## Security
 
