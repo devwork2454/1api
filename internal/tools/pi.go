@@ -16,14 +16,8 @@ import (
 // Pi has no static provider-config file: providers are registered by TypeScript
 // extensions (pi.registerProvider(...)) auto-loaded from ~/.pi/agent/extensions.
 // 1api owns one such extension, 1api.ts, wrapping a JSON blob so it can be
-// round-tripped without a TS parser; see piExtensionOpen/Close markers below.
-const (
-	piExtensionOpen  = `pi.registerProvider("1api", `
-	piExtensionClose = `);
-  // 1api:config:end
-}
-`
-)
+// round-tripped without a TS parser; see the 1api:config markers in
+// piExtensionContent.
 
 // piConfigRE matches both the current "1api" provider name and the legacy
 // pre-rename "charon" name, so a config written by an older version is still read.
@@ -180,27 +174,27 @@ func newPi() *Tool {
 				}
 			}
 
-			var tierIds []string
+			var tierIDs []string
 			if a.High != "" {
-				tierIds = append(tierIds, a.High)
+				tierIDs = append(tierIDs, a.High)
 			}
 			if a.Model != "" {
-				tierIds = append(tierIds, a.Model)
+				tierIDs = append(tierIDs, a.Model)
 			}
 			if a.Low != "" {
-				tierIds = append(tierIds, a.Low)
+				tierIDs = append(tierIDs, a.Low)
 			}
 
-			var uniqueIds []string
+			var uniqueIDs []string
 			seen := map[string]bool{}
-			for _, id := range tierIds {
+			for _, id := range tierIDs {
 				if id != "" && !seen[id] {
 					seen[id] = true
-					uniqueIds = append(uniqueIds, id)
+					uniqueIDs = append(uniqueIDs, id)
 				}
 			}
 
-			ids := uniqueIds
+			ids := uniqueIDs
 			if len(ids) == 0 {
 				ids = a.AllModels
 			}
@@ -232,31 +226,31 @@ func newPi() *Tool {
 				for _, pName := range ps.List() {
 					if rec, err := ps.Get(pName); err == nil {
 
-						var usableIds []string
+						var usableIDs []string
 						if rec.High != "" {
-							usableIds = append(usableIds, rec.High)
+							usableIDs = append(usableIDs, rec.High)
 						}
 						if rec.Mid != "" {
-							usableIds = append(usableIds, rec.Mid)
+							usableIDs = append(usableIDs, rec.Mid)
 						}
 						if rec.Low != "" {
-							usableIds = append(usableIds, rec.Low)
+							usableIDs = append(usableIDs, rec.Low)
 						}
 
-						var uIds []string
+						var uniqIDs []string
 						uSeen := map[string]bool{}
-						for _, id := range usableIds {
+						for _, id := range usableIDs {
 							if id != "" && !uSeen[id] {
 								uSeen[id] = true
-								uIds = append(uIds, id)
+								uniqIDs = append(uniqIDs, id)
 							}
 						}
 
-						if len(uIds) == 0 {
-							uIds = rec.Usable
+						if len(uniqIDs) == 0 {
+							uniqIDs = rec.Usable
 						}
-						if len(uIds) == 0 && rec.Mid != "" {
-							uIds = []string{rec.Mid}
+						if len(uniqIDs) == 0 && rec.Mid != "" {
+							uniqIDs = []string{rec.Mid}
 						}
 
 						cfgs = append(cfgs, piProviderConfig{
@@ -264,7 +258,7 @@ func newPi() *Tool {
 							BaseURL: rec.Endpoint,
 							APIKey:  piEscapeValue(rec.Key),
 							API:     "openai-completions",
-							Models:  piBuildModels(uIds),
+							Models:  piBuildModels(uniqIDs),
 						})
 					}
 				}
