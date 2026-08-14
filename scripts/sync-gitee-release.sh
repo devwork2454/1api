@@ -2,7 +2,7 @@
 # sync-gitee-release.sh — copy a GitHub release's assets onto the Gitee mirror.
 #
 # Usage:
-#   GITEE_TOKEN=... scripts/sync-gitee-release.sh v1.5.16-devwork1
+#   GITEE_TOKEN=... scripts/sync-gitee-release.sh v1.5.17-devwork1
 #
 # Env:
 #   GH_REPO          GitHub owner/name (default: devwork2454/1api)
