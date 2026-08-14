@@ -2,7 +2,17 @@
 
 ## 当前任务
 
-修复：添加 DeepSeek 供应商并选 Anthropic 协议时报错。
+发布 `v1.5.16-devwork1`：把 DeepSeek Anthropic 探测回退打进 GitHub + Gitee，让 `1api update` 能装到修复版。
+
+### 规格（代定）
+
+- **版本**：`v1.5.16-devwork1`（上一发布 tag 为 `v1.5.15-devwork1`）。
+- **内容**：`806db1b` Anthropic list/chat URL 回退（DeepSeek `/anthropic` 无 `/v1/models`）。
+- **GitHub**：推 `1api/main` + annotated tag，等 Release 出 6 个资产。
+- **Gitee**：推同一 tag，`scripts/sync-gitee-release.sh` 挂同名附件。
+- **验收**：两边 latest = `v1.5.16-devwork1`，6 资产可下载；`.harness/verify.sh` 为 0。
+- **回滚点**：`v1.5.15-devwork1`。
+- **不做什么**：不改业务逻辑；不把 token 写入仓库。
 
 ### 规格（代定）
 
