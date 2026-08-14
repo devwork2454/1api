@@ -80,8 +80,8 @@ curl -fsSL https://github.com/devwork2454/1api/releases/latest/download/install.
 ```
 
 > Prepend `PREFIX=/usr/local` to install system-wide, or `VERSION=v1.2.3` to pin a release.
-> The installer tries **GitHub releases first**, then falls back to the **Gitee**
-> mirror (`GITEE_REPO`, default same `owner/1api`) if GitHub is unreachable.
+> The installer tries **Gitee releases first**, then falls back to **GitHub**
+> if Gitee is unreachable (`GITEE_REPO`, default `wbff/1api`).
 > See [docs/GITEE.md](docs/GITEE.md) for mirror setup. Upstream official installs
 > use `mingtheanlay/1api` instead.
 

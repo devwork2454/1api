@@ -32,6 +32,10 @@ func TestUpdateInstallURLRespectsSource(t *testing.T) {
 }
 
 func TestPreferGiteeUpdateEnv(t *testing.T) {
+	t.Setenv("CHARON_UPDATE_SOURCE", "")
+	if !preferGiteeUpdate() {
+		t.Fatal("default want gitee")
+	}
 	t.Setenv("CHARON_UPDATE_SOURCE", "gitee")
 	if !preferGiteeUpdate() {
 		t.Fatal("want gitee")
@@ -40,44 +44,18 @@ func TestPreferGiteeUpdateEnv(t *testing.T) {
 	if preferGiteeUpdate() {
 		t.Fatal("want github")
 	}
-}
-
-func TestLooksLikeChinaEnv(t *testing.T) {
-	t.Setenv("TZ", "")
-	t.Setenv("LANG", "")
-	t.Setenv("LC_ALL", "")
-	t.Setenv("LC_MESSAGES", "")
-	if looksLikeChinaEnv() {
-		t.Fatal("empty env should not look like CN")
-	}
-	t.Setenv("TZ", "Asia/Shanghai")
-	if !looksLikeChinaEnv() {
-		t.Fatal("Asia/Shanghai should look like CN")
-	}
-	t.Setenv("TZ", "America/New_York")
-	t.Setenv("LANG", "zh_CN.UTF-8")
-	if !looksLikeChinaEnv() {
-		t.Fatal("zh_CN LANG should look like CN")
-	}
-}
-
-func TestPreferGiteeUpdateUsesProbe(t *testing.T) {
-	t.Setenv("CHARON_UPDATE_SOURCE", "")
-	t.Setenv("TZ", "UTC")
-	t.Setenv("LANG", "en_US.UTF-8")
-	t.Setenv("LC_ALL", "")
-	t.Setenv("LC_MESSAGES", "")
-
-	orig := githubQuickReachable
-	t.Cleanup(func() { githubQuickReachable = orig })
-
-	githubQuickReachable = func() bool { return true }
+	t.Setenv("CHARON_UPDATE_SOURCE", "gh")
 	if preferGiteeUpdate() {
-		t.Fatal("reachable GitHub + non-CN → prefer GitHub")
+		t.Fatal("gh want github")
 	}
-	githubQuickReachable = func() bool { return false }
-	if !preferGiteeUpdate() {
-		t.Fatal("unreachable GitHub → prefer Gitee")
+}
+
+func TestUpdateInstallURLDefaultsToGitee(t *testing.T) {
+	t.Setenv("CHARON_UPDATE_URL", "")
+	t.Setenv("CHARON_UPDATE_SOURCE", "")
+	got := updateInstallURL()
+	if !strings.Contains(got, "gitee.com") || !strings.Contains(got, "wbff/1api") {
+		t.Errorf("default URL = %q, want Gitee", got)
 	}
 }
 

@@ -4,12 +4,10 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"net"
 	"os"
 	"os/exec"
 	"strings"
 	"text/tabwriter"
-	"time"
 
 	"1api/internal/models"
 	"1api/internal/profile"
@@ -651,10 +649,6 @@ const (
 	giteeReleasesAPI       = "https://gitee.com/api/v5/repos/" + giteeOwnerRepo + "/releases/latest"
 	giteeReleaseDownload   = "https://gitee.com/" + giteeOwnerRepo + "/releases/download"
 	githubUpdateInstallURL = "https://github.com/devwork2454/1api/releases/latest/download/install.sh"
-
-	// updateProbeHost is a cheap TCP reachability check target for GitHub.
-	updateProbeHost = "github.com:443"
-	updateProbeWait = 2 * time.Second
 )
 
 // updateInstallURL returns a human-readable primary update source label/URL.
@@ -669,51 +663,16 @@ func updateInstallURL() string {
 	return githubUpdateInstallURL
 }
 
-// preferGiteeUpdate chooses Gitee as the primary install mirror.
-// Order: CHARON_UPDATE_SOURCE → CN locale/TZ → GitHub unreachable in 2s → else GitHub.
+// preferGiteeUpdate reports whether Gitee is the primary update mirror.
+// Default is Gitee first (GitHub is the fallback). CHARON_UPDATE_SOURCE=github
+// (or gh/global) forces GitHub first.
 func preferGiteeUpdate() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("CHARON_UPDATE_SOURCE"))) {
-	case "gitee", "cn", "china":
-		return true
 	case "github", "gh", "global":
 		return false
-	}
-	if looksLikeChinaEnv() {
+	default:
 		return true
 	}
-	// Outside CN markers: use GitHub when the host answers quickly.
-	return !githubQuickReachable()
-}
-
-// looksLikeChinaEnv is a soft signal from timezone / locale (no geo-IP).
-func looksLikeChinaEnv() bool {
-	tz := strings.ToLower(strings.TrimSpace(os.Getenv("TZ")))
-	for _, p := range []string{
-		"asia/shanghai", "asia/chongqing", "asia/harbin", "asia/urumqi",
-	} {
-		if tz == p || strings.Contains(tz, p) {
-			return true
-		}
-	}
-	for _, key := range []string{"LC_ALL", "LANG", "LC_MESSAGES"} {
-		v := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
-		if strings.HasPrefix(v, "zh_cn") || strings.HasPrefix(v, "zh-cn") {
-			return true
-		}
-	}
-	return false
-}
-
-// githubQuickReachable reports whether github.com:443 accepts a TCP connect
-// within updateProbeWait. Used only to pick primary mirror; download still
-// falls back if the chosen host fails later.
-var githubQuickReachable = func() bool {
-	conn, err := net.DialTimeout("tcp", updateProbeHost, updateProbeWait)
-	if err != nil {
-		return false
-	}
-	_ = conn.Close()
-	return true
 }
 
 // giteeInstallFetchScript is a POSIX fragment: resolve latest Gitee release tag
@@ -735,9 +694,9 @@ func runUpdateCurlPipe(label, shellSnippet string) error {
 	return cmd.Run()
 }
 
-// cmdUpdate upgrades via install.sh. Primary mirror is network/locale-aware
-// (Gitee in CN, GitHub otherwise); the other side is always the fallback.
-// CHARON_UPDATE_URL forces a single URL; CHARON_UPDATE_SOURCE=gitee|github forces order.
+// cmdUpdate upgrades via install.sh. Primary mirror is Gitee; GitHub is the
+// fallback. CHARON_UPDATE_URL forces a single URL; CHARON_UPDATE_SOURCE=github
+// (or gh/global) flips the order.
 func cmdUpdate() error {
 	if u := strings.TrimSpace(os.Getenv("CHARON_UPDATE_URL")); u != "" {
 		if err := runUpdateCurlPipe(u, "curl -fsSL --connect-timeout 15 --max-time 300 "+shellQuote(u)+" | sh"); err != nil {
