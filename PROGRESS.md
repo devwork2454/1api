@@ -23,6 +23,7 @@
 - `preferGiteeUpdate` 默认恒为 true；仅 `CHARON_UPDATE_SOURCE=github|gh|global` 翻转。
 - 删除 locale / TCP 探测选源；usage 与 README 改为 Gitee 先。
 - `.harness/verify.sh`：gofmt + vet + update 测试 + `go test -race ./...` 通过。
+- 独立终审（autonomy-harness:verifier）PASS。
 
 ## 进行中
 
