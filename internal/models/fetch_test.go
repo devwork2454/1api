@@ -71,6 +71,53 @@ func TestFetchAnthropic(t *testing.T) {
 	}
 }
 
+func TestFetchAnthropicFallsBackToHostModels(t *testing.T) {
+	// DeepSeek-style: Messages live under /anthropic, catalog is the host /v1/models.
+	var hitAnthropic, hitHost int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/anthropic/v1/models":
+			hitAnthropic++
+			http.NotFound(w, r)
+		case "/v1/models":
+			hitHost++
+			if r.Header.Get("x-api-key") != "sk-ds" {
+				t.Errorf("fallback list auth = %q", r.Header.Get("x-api-key"))
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": []map[string]string{{"id": "deepseek-v4-flash"}, {"id": "deepseek-v4-pro"}},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	got, err := Fetch(Anthropic, srv.URL+"/anthropic", "sk-ds")
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	want := []string{"deepseek-v4-flash", "deepseek-v4-pro"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if hitAnthropic == 0 || hitHost == 0 {
+		t.Errorf("want primary 404 then host list, hits anthropic=%d host=%d", hitAnthropic, hitHost)
+	}
+}
+
+func TestListURLCandidatesStripsAnthropicPathNotHost(t *testing.T) {
+	got := listURLCandidates(Anthropic, "https://api.deepseek.com/anthropic")
+	if len(got) < 2 || got[0] != "https://api.deepseek.com/anthropic/v1/models" || got[1] != "https://api.deepseek.com/v1/models" {
+		t.Fatalf("deepseek candidates = %v", got)
+	}
+	// Host name contains "anthropic" but is not a path prefix — do not strip it.
+	got = listURLCandidates(Anthropic, "https://api.anthropic.com")
+	if len(got) != 1 || got[0] != "https://api.anthropic.com/v1/models" {
+		t.Fatalf("official anthropic candidates = %v", got)
+	}
+}
+
 func TestFetchHTTPError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "nope", http.StatusUnauthorized)

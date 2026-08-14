@@ -2,7 +2,16 @@
 
 ## 当前任务
 
-发布 `v1.5.15-devwork1`：GitHub GoReleaser + 同步同名附件到 Gitee，让 `1api update` 默认 Gitee 能装到含 Gitee-first 逻辑的版本。
+修复：添加 DeepSeek 供应商并选 Anthropic 协议时报错。
+
+### 规格（代定）
+
+- **根因**：`https://api.deepseek.com/anthropic` 无 `GET /v1/models`（404）；目录在主机 `GET /v1/models`；对话在 `POST /anthropic/v1/messages`。`FilterReachable` 只打 `{endpoint}/v1/models`，添加失败。
+- **修复**：Anthropic wire 的 list/chat URL 增加回退（不改鉴权头）。
+  - list：`{ep}/v1/models` 失败则试去 `/anthropic` 后的主机 `/v1/models`。
+  - chat：`{ep}/v1/messages` 失败且 path 无 `/anthropic` 时试 `{origin}/anthropic/v1/messages`。
+- **验收**：httptest 模拟 DeepSeek 分叉时 `Fetch` / `Probe` / `FilterReachable` 成功；`.harness/verify.sh` 为 0。
+- **不做什么**：不改真实 HOME 里的 provider；测试不打真网；不为此单独打 tag。
 
 ### 规格（代定）
 
@@ -29,6 +38,12 @@
   - Gitee tag + release `796309`，6 个同名附件公开 200。
   - 两边 `/releases/latest` 均为 `v1.5.15-devwork1`。
   - CI on main 成功。
+
+## 已完成（本任务）
+
+- 根因已用真 DeepSeek 口验证：`GET /anthropic/v1/models` 404；`GET /v1/models` 200；`POST /anthropic/v1/messages` 200。
+- Anthropic list/chat 增加 URL 回退；httptest 覆盖 Fetch / Probe / FilterReachable。
+- `.harness/verify.sh` 通过。
 
 ## 进行中
 

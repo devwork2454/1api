@@ -158,6 +158,42 @@ func TestProbeChatHTTPError(t *testing.T) {
 	}
 }
 
+func TestProbeChatAnthropicPrefixFallback(t *testing.T) {
+	// Endpoint is the OpenAI-style origin; Messages only exist under /anthropic.
+	var sawFallback bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/models":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": []map[string]string{{"id": "deepseek-v4-flash"}},
+			})
+		case "/v1/messages":
+			http.NotFound(w, r)
+		case "/anthropic/v1/messages":
+			sawFallback = true
+			if r.Header.Get("x-api-key") != "sk-ds" {
+				t.Errorf("x-api-key = %q", r.Header.Get("x-api-key"))
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "msg_1", "type": "message"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	got, err := Probe(Anthropic, srv.URL, "sk-ds", ProbeOptions{
+		ChatModel:  "deepseek-v4-flash",
+		Timeout:    5 * time.Second,
+		HTTPClient: srv.Client(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sawFallback || !got.ChatOK {
+		t.Fatalf("want /anthropic/v1/messages fallback, got %+v saw=%v", got, sawFallback)
+	}
+}
+
 func TestChatURL(t *testing.T) {
 	if got := chatURL(OpenAI, "http://x"); got != "http://x/v1/chat/completions" {
 		t.Errorf("openai bare = %s", got)

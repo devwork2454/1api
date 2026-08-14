@@ -80,6 +80,38 @@ func TestFilterReachableAllFail(t *testing.T) {
 	}
 }
 
+func TestFilterReachableAnthropicGatewaySplit(t *testing.T) {
+	// DeepSeek: list at /v1/models, chat at /anthropic/v1/messages.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/models":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": []map[string]string{
+					{"id": "deepseek-v4-flash"},
+					{"id": "deepseek-v4-pro"},
+				},
+			})
+		case "/anthropic/v1/messages":
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "msg_1", "type": "message"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	got, err := FilterReachable(Anthropic, srv.URL+"/anthropic", "sk-ds", FilterOptions{
+		HTTPClient:      srv.Client(),
+		PerModelTimeout: 5 * time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"deepseek-v4-flash", "deepseek-v4-pro"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v want %v", got, want)
+	}
+}
+
 func TestFilterReachableCandidatesIntersect(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

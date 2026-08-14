@@ -2,11 +2,8 @@
 package models
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
 	"net/http"
-	"sort"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -32,50 +29,55 @@ func modelsURL(endpoint string) string {
 	return base + "/v1/models"
 }
 
+// listURLCandidates is the models-list URLs to try, primary first.
+// Anthropic-compatible gateways (DeepSeek) often serve GET /v1/models on the
+// host origin while Messages live under a /anthropic prefix that has no catalog.
+func listURLCandidates(provider Provider, endpoint string) []string {
+	primary := modelsURL(endpoint)
+	out := []string{primary}
+	if provider != Anthropic {
+		return out
+	}
+	u, ok := parseEndpoint(endpoint)
+	if !ok {
+		return out
+	}
+	u.Path = stripAnthropicAPIPath(u.Path)
+	u.RawQuery = ""
+	u.Fragment = ""
+	alt := modelsURL(u.String())
+	if alt != primary {
+		out = append(out, alt)
+	}
+	return out
+}
+
+func parseEndpoint(endpoint string) (*url.URL, bool) {
+	raw := strings.TrimRight(strings.TrimSpace(endpoint), "/")
+	if raw == "" {
+		return nil, false
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return nil, false
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return nil, false
+	}
+	return u, true
+}
+
+// stripAnthropicAPIPath removes a trailing /v1 and /anthropic path prefix only
+// (never the host — api.anthropic.com must stay intact).
+func stripAnthropicAPIPath(p string) string {
+	p = strings.TrimRight(p, "/")
+	p = strings.TrimSuffix(p, "/v1")
+	p = strings.TrimRight(p, "/")
+	p = strings.TrimSuffix(p, "/anthropic")
+	return strings.TrimRight(p, "/")
+}
+
 // Fetch returns the sorted model IDs offered by endpoint for the given key.
 func Fetch(provider Provider, endpoint, key string) ([]string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, modelsURL(endpoint), nil)
-	if err != nil {
-		return nil, err
-	}
-	switch provider {
-	case Anthropic:
-		req.Header.Set("x-api-key", key)
-		req.Header.Set("anthropic-version", "2023-06-01")
-	default:
-		req.Header.Set("Authorization", "Bearer "+key)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("API returned %s (check endpoint and key)", resp.Status)
-	}
-
-	var out struct {
-		Data []struct {
-			ID string `json:"id"`
-		} `json:"data"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return nil, fmt.Errorf("could not parse model list: %w", err)
-	}
-
-	ids := make([]string, 0, len(out.Data))
-	for _, m := range out.Data {
-		if m.ID != "" {
-			ids = append(ids, m.ID)
-		}
-	}
-	if len(ids) == 0 {
-		return nil, fmt.Errorf("no models returned by %s", endpoint)
-	}
-	sort.Strings(ids)
-	return ids, nil
+	return fetchWithClient(http.DefaultClient, provider, endpoint, key, 20*time.Second)
 }

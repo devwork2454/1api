@@ -85,7 +85,25 @@ func fetchWithClient(client *http.Client, provider Provider, endpoint, key strin
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, modelsURL(endpoint), nil)
+	var last error
+	for _, listURL := range listURLCandidates(provider, endpoint) {
+		ids, err := fetchModelsOnce(ctx, client, provider, listURL, key)
+		if err == nil {
+			return ids, nil
+		}
+		last = err
+		if ctx.Err() != nil {
+			return nil, err
+		}
+	}
+	if last == nil {
+		return nil, fmt.Errorf("no models returned by %s", endpoint)
+	}
+	return nil, last
+}
+
+func fetchModelsOnce(ctx context.Context, client *http.Client, provider Provider, listURL, key string) ([]string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, listURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -115,9 +133,8 @@ func fetchWithClient(client *http.Client, provider Provider, endpoint, key strin
 		}
 	}
 	if len(ids) == 0 {
-		return nil, fmt.Errorf("no models returned by %s", endpoint)
+		return nil, fmt.Errorf("no models returned by %s", listURL)
 	}
-	// Match Fetch: stable sort for callers.
 	sortStrings(ids)
 	return ids, nil
 }
@@ -150,6 +167,35 @@ func chatURL(provider Provider, endpoint string) string {
 	return base + "/v1/chat/completions"
 }
 
+// chatURLCandidates is the chat URLs to try, primary first.
+// DeepSeek-style hosts expose Messages only under /anthropic when the stored
+// endpoint is the OpenAI origin.
+func chatURLCandidates(provider Provider, endpoint string) []string {
+	primary := chatURL(provider, endpoint)
+	out := []string{primary}
+	if provider != Anthropic {
+		return out
+	}
+	u, ok := parseEndpoint(endpoint)
+	if !ok {
+		return out
+	}
+	p := strings.TrimRight(u.Path, "/")
+	p = strings.TrimSuffix(p, "/v1")
+	p = strings.TrimRight(p, "/")
+	if strings.HasSuffix(p, "/anthropic") {
+		return out
+	}
+	u.Path = p + "/anthropic"
+	u.RawQuery = ""
+	u.Fragment = ""
+	alt := strings.TrimRight(u.String(), "/") + "/v1/messages"
+	if alt != primary {
+		out = append(out, alt)
+	}
+	return out
+}
+
 func probeChat(client *http.Client, provider Provider, endpoint, key, model string, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -174,7 +220,25 @@ func probeChat(client *http.Client, provider Provider, endpoint, key, model stri
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, chatURL(provider, endpoint), bytes.NewReader(payload))
+	var last error
+	for _, dest := range chatURLCandidates(provider, endpoint) {
+		err := postChatOnce(ctx, client, provider, dest, key, payload)
+		if err == nil {
+			return nil
+		}
+		last = err
+		if ctx.Err() != nil {
+			return err
+		}
+	}
+	if last == nil {
+		return fmt.Errorf("API returned no chat URL")
+	}
+	return last
+}
+
+func postChatOnce(ctx context.Context, client *http.Client, provider Provider, dest, key string, payload []byte) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, dest, bytes.NewReader(payload))
 	if err != nil {
 		return err
 	}
