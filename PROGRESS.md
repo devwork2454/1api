@@ -56,6 +56,14 @@
 - `.harness/verify.sh` 通过。
 - 独立终审 PASS。
 
+## 已完成（v1.5.16 发版）
+
+- GitHub Release `v1.5.16-devwork1` 成功（6 资产）。
+- Gitee release `796374`，6 个同名附件公开 200。
+- 两边 latest = `v1.5.16-devwork1`。
+- CI on main 成功。
+- `.harness/verify.sh` 预检通过。
+
 ## 进行中
 
 （无）
@@ -63,4 +71,4 @@
 ## 未开始 / 已知问题
 
 - GitHub Actions「Mirror to Gitee」仍失败；本次用本地 `git push gitee` 补齐了 main/tag。
-- 本机已装的 `v1.5.13-devwork1-dirty` 需用户自己跑一次 `1api update` 才会换成新逻辑。
+- 本机旧二进制需用户跑一次 `1api update` 才会升到含 DeepSeek Anthropic 修复的 `v1.5.16`。
