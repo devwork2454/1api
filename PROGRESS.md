@@ -2,19 +2,19 @@
 
 ## 当前任务
 
-`1api update` 默认先拉 Gitee，失败再拉 GitHub。
+发布 `v1.5.15-devwork1`：GitHub GoReleaser + 同步同名附件到 Gitee，让 `1api update` 默认 Gitee 能装到含 Gitee-first 逻辑的版本。
 
 ### 规格（代定）
 
-- **目标**：去掉 locale / GitHub 2s 探测选源；无覆盖时恒为 Gitee → GitHub。
-- **保留**：`CHARON_UPDATE_URL` 单源覆盖；`CHARON_UPDATE_SOURCE=github|gh|global` 仍可强制 GitHub 优先。
-- **文档**：usage 与 README 安装顺序与代码一致（Gitee 先）。
-- **不做什么**：不打新 tag / 不发布；不同步 Gitee release 附件；不改 install.sh 下载顺序（已是 Gitee 先）。
+- **版本**：`v1.5.15-devwork1`（上一发布 tag 为 `v1.5.14-devwork1`）。
+- **GitHub**：推 `1api/main` + 打 annotated tag，等 Release workflow 出 4 平台 tar.gz、`checksums.txt`、`install.sh`。
+- **Gitee**：推同一 tag，创建 release，上传同名附件。
+- **脚本**：`scripts/sync-gitee-release.sh` 从 GitHub 拉资产再挂到 Gitee（token 只读 `GITEE_TOKEN`）。
 - **验收**：
-  1. 空 `CHARON_UPDATE_SOURCE` 时 `preferGiteeUpdate() == true`，`updateInstallURL` 含 `gitee.com/wbff/1api`。
-  2. `CHARON_UPDATE_SOURCE=github` 仍走 GitHub URL。
-  3. `looksLikeChinaEnv` / `githubQuickReachable` 不再参与选源。
-  4. `.harness/verify.sh` 退出码 0。
+  1. GitHub latest tag = `v1.5.15-devwork1`，6 个资产齐全。
+  2. Gitee `/releases/latest` 的 `tag_name` = `v1.5.15-devwork1`，同 6 个资产可下载。
+  3. `.harness/verify.sh` 仍为 0。
+- **不做什么**：不改业务逻辑；不把 token 写入仓库；不同步更旧的 `v1.5.14` 附件（latest 已覆盖 update 路径）。
 
 ## 已完成
 
