@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"1api/internal/artifact"
+	"1api/internal/provider"
 )
 
 // Pi has no static provider-config file: providers are registered by TypeScript
@@ -26,7 +27,7 @@ const (
 
 // piConfigRE matches both the current "1api" provider name and the legacy
 // pre-rename "charon" name, so a config written by an older version is still read.
-var piConfigRE = regexp.MustCompile(`(?s)pi\.registerProvider\("(?:1api|charon)",\s*(.*?)\);\s*\n\s*// (?:1api|charon):config:end`)
+var piConfigRE = regexp.MustCompile(`(?s)pi\.registerProvider\("(?:1api|charon)",\s*({.*?})\);`)
 
 // piModel is one entry of a pi provider's "models" array.
 type piModel struct {
@@ -92,20 +93,25 @@ func piBuildModels(ids []string) []piModel {
 }
 
 // piExtensionContent renders 1api's extension .ts file for cfg.
-func piExtensionContent(cfg piProviderConfig) ([]byte, error) {
-	body, err := json.MarshalIndent(cfg, "  ", "  ")
-	if err != nil {
-		return nil, err
-	}
+func piExtensionContent(cfgs []piProviderConfig) ([]byte, error) {
 	var b strings.Builder
 	b.WriteString(`import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export default function (pi: ExtensionAPI) {
   // 1api:config
-  `)
-	b.WriteString(piExtensionOpen)
-	b.Write(body)
-	b.WriteString(piExtensionClose)
+`)
+	for _, cfg := range cfgs {
+		body, err := json.MarshalIndent(cfg, "  ", "  ")
+		if err != nil {
+			return nil, err
+		}
+		b.WriteString("  pi.registerProvider(\"")
+		b.WriteString(cfg.Name)
+		b.WriteString("\", ")
+		b.Write(body)
+		b.WriteString(");\n")
+	}
+	b.WriteString("  // 1api:config:end\n}\n")
 	return []byte(b.String()), nil
 }
 
@@ -188,7 +194,35 @@ func newPi() *Tool {
 				API:     "openai-completions",
 				Models:  piBuildModels(ids),
 			}
-			content, err := piExtensionContent(cfg)
+
+			var cfgs []piProviderConfig
+			cfgs = append(cfgs, cfg)
+
+			base := os.Getenv("XDG_CONFIG_HOME")
+			if base == "" {
+				h, _ := os.UserHomeDir()
+				base = filepath.Join(h, ".config")
+			}
+			providerRoot := filepath.Join(base, "1api")
+			if ps, err := provider.OpenAt(providerRoot); err == nil {
+				for _, pName := range ps.List() {
+					if rec, err := ps.Get(pName); err == nil {
+						usableIds := rec.Usable
+						if len(usableIds) == 0 && rec.Mid != "" {
+							usableIds = []string{rec.Mid}
+						}
+						cfgs = append(cfgs, piProviderConfig{
+							Name:    "1api-" + pName,
+							BaseURL: rec.Endpoint,
+							APIKey:  piEscapeValue(rec.Key),
+							API:     "openai-completions",
+							Models:  piBuildModels(usableIds),
+						})
+					}
+				}
+			}
+
+			content, err := piExtensionContent(cfgs)
 			if err != nil {
 				return fmt.Errorf("render pi extension: %w", err)
 			}
