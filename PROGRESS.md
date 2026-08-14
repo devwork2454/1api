@@ -44,6 +44,7 @@
 - 根因已用真 DeepSeek 口验证：`GET /anthropic/v1/models` 404；`GET /v1/models` 200；`POST /anthropic/v1/messages` 200。
 - Anthropic list/chat 增加 URL 回退；httptest 覆盖 Fetch / Probe / FilterReachable。
 - `.harness/verify.sh` 通过。
+- 独立终审 PASS。
 
 ## 进行中
 
