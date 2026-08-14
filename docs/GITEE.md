@@ -56,14 +56,14 @@ https://help.gitee.com/repository/settings/sync-between-gitee-github
 打 tag `v*` 会触发 GitHub Actions GoReleaser；再用仓库脚本把资产同步到 Gitee 发行版（git mirror **不会**带附件）：
 
 ```sh
-GITEE_TOKEN=... scripts/sync-gitee-release.sh v1.5.15-devwork1
+GITEE_TOKEN=... scripts/sync-gitee-release.sh v1.5.16-devwork1
 ```
 
 ## 5. 安装命令
 
 ```sh
 # 推荐：直接 Gitee（需已知 VERSION，或已安装后用 1api update）
-VERSION=v1.5.15-devwork1 sh -c \
+VERSION=v1.5.16-devwork1 sh -c \
   'curl -fsSL "https://gitee.com/wbff/1api/releases/download/${VERSION}/install.sh" | sh'
 
 # 也可从 GitHub 拉 install.sh（脚本内会优先 Gitee 下二进制）
