@@ -24,6 +24,11 @@
 - 删除 locale / TCP 探测选源；usage 与 README 改为 Gitee 先。
 - `.harness/verify.sh`：gofmt + vet + update 测试 + `go test -race ./...` 通过。
 - 独立终审（autonomy-harness:verifier）PASS。
+- 发布 `v1.5.15-devwork1`：
+  - GitHub Release workflow 成功（6 资产）。
+  - Gitee tag + release `796309`，6 个同名附件公开 200。
+  - 两边 `/releases/latest` 均为 `v1.5.15-devwork1`。
+  - CI on main 成功。
 
 ## 进行中
 
@@ -31,5 +36,5 @@
 
 ## 未开始 / 已知问题
 
-- Gitee 发行版附件落后一版；`update` 改 Gitee 优先后，在未同步附件前会装到 `v1.5.13`。
-- 本改动需新版本发布后，已安装用户才会拿到新的 `update` 行为。
+- GitHub Actions「Mirror to Gitee」仍失败；本次用本地 `git push gitee` 补齐了 main/tag。
+- 本机已装的 `v1.5.13-devwork1-dirty` 需用户自己跑一次 `1api update` 才会换成新逻辑。

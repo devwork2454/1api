@@ -35,12 +35,17 @@ if [ -n "${RELEASE_DIR:-}" ]; then
 else
   dir=$(mktemp -d)
   trap 'rm -rf "$dir"' EXIT INT TERM
-  info "Downloading GitHub assets for $TAG"
-  for f in $ASSETS; do
-    url="https://github.com/${GH_REPO}/releases/download/${TAG}/${f}"
-    info "  $f"
-    curl -fL --connect-timeout 15 --max-time 300 "$url" -o "$dir/$f"
-  done
+  if command -v gh >/dev/null 2>&1; then
+    info "Downloading GitHub assets for $TAG via gh"
+    gh release download "$TAG" --repo "$GH_REPO" --dir "$dir"
+  else
+    info "Downloading GitHub assets for $TAG via curl"
+    for f in $ASSETS; do
+      url="https://github.com/${GH_REPO}/releases/download/${TAG}/${f}"
+      info "  $f"
+      curl -fL --retry 3 --retry-delay 2 --connect-timeout 15 --max-time 300 "$url" -o "$dir/$f"
+    done
+  fi
 fi
 
 for f in $ASSETS; do
