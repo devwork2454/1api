@@ -179,7 +179,31 @@ func newPi() *Tool {
 					}
 				}
 			}
-			ids := a.AllModels
+
+			var tierIds []string
+			if a.High != "" {
+				tierIds = append(tierIds, a.High)
+			}
+			if a.Model != "" {
+				tierIds = append(tierIds, a.Model)
+			}
+			if a.Low != "" {
+				tierIds = append(tierIds, a.Low)
+			}
+
+			var uniqueIds []string
+			seen := map[string]bool{}
+			for _, id := range tierIds {
+				if id != "" && !seen[id] {
+					seen[id] = true
+					uniqueIds = append(uniqueIds, id)
+				}
+			}
+
+			ids := uniqueIds
+			if len(ids) == 0 {
+				ids = a.AllModels
+			}
 			if len(ids) == 0 {
 				ids = existingModels
 			}
@@ -207,16 +231,40 @@ func newPi() *Tool {
 			if ps, err := provider.OpenAt(providerRoot); err == nil {
 				for _, pName := range ps.List() {
 					if rec, err := ps.Get(pName); err == nil {
-						usableIds := rec.Usable
-						if len(usableIds) == 0 && rec.Mid != "" {
-							usableIds = []string{rec.Mid}
+
+						var usableIds []string
+						if rec.High != "" {
+							usableIds = append(usableIds, rec.High)
 						}
+						if rec.Mid != "" {
+							usableIds = append(usableIds, rec.Mid)
+						}
+						if rec.Low != "" {
+							usableIds = append(usableIds, rec.Low)
+						}
+
+						var uIds []string
+						uSeen := map[string]bool{}
+						for _, id := range usableIds {
+							if id != "" && !uSeen[id] {
+								uSeen[id] = true
+								uIds = append(uIds, id)
+							}
+						}
+
+						if len(uIds) == 0 {
+							uIds = rec.Usable
+						}
+						if len(uIds) == 0 && rec.Mid != "" {
+							uIds = []string{rec.Mid}
+						}
+
 						cfgs = append(cfgs, piProviderConfig{
 							Name:    "1api-" + pName,
 							BaseURL: rec.Endpoint,
 							APIKey:  piEscapeValue(rec.Key),
 							API:     "openai-completions",
-							Models:  piBuildModels(usableIds),
+							Models:  piBuildModels(uIds),
 						})
 					}
 				}

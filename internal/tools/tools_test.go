@@ -410,7 +410,7 @@ func TestOpenCodeDescribeAndApply(t *testing.T) {
 	if !c.Detected() {
 		t.Fatal("opencode should be detected via auth.json")
 	}
-	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://openrouter.ai/api/v1", Key: "sk-or-123456789", Model: "x/y", SkipVerify: true}); err != nil {
+	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://openrouter.ai/api/v1", Key: "sk-or-123456789", Model: "x/y", High: "x/z", SkipVerify: true}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -637,6 +637,7 @@ func TestPiDescribeAndApply(t *testing.T) {
 		Endpoint:   "https://openrouter.ai/api/v1",
 		Key:        "sk-or-123456789",
 		Model:      "x/y",
+		High:       "x/z",
 		AllModels:  []string{"x/y", "x/z"},
 		SkipVerify: true,
 	}); err != nil {
@@ -677,7 +678,7 @@ func TestPiDescribeAndApply(t *testing.T) {
 
 	// A rename/key-rotation call without AllModels must preserve the previously
 	// registered model list rather than collapsing the /model picker to one entry.
-	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://openrouter.ai/api/v1", Key: "sk-or-999", Model: "x/y", SkipVerify: true}); err != nil {
+	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://openrouter.ai/api/v1", Key: "sk-or-999", Model: "x/y", High: "x/z", SkipVerify: true}); err != nil {
 		t.Fatal(err)
 	}
 	data, _ = os.ReadFile(extensionPath)
