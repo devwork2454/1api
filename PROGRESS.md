@@ -46,11 +46,21 @@
 - CI on main 成功。
 - `.harness/verify.sh` 预检通过。
 
+## 已完成（v1.5.17 发版）
+
+- GitHub Release `v1.5.17-devwork1` 成功（6 资产，tag 指向 `037cc05`）。
+- Gitee release `796987`，6 个同名附件公开 200。
+- 两边 latest = `v1.5.17-devwork1`。
+- CI on main 成功（lint + ubuntu/macos test）。
+- `.harness/verify.sh` 预检通过。
+- 发版前补了 `pi.go` lint（`*Ids` → `*IDs`，删除未用常量），并在 0 下载时重打同一 tag。
+- 独立终审（autonomy-harness:verifier）PASS。
+
 ## 进行中
 
-- 预检 → 打 `v1.5.17-devwork1` → GitHub Release → Gitee 同步。
+（无）
 
 ## 未开始 / 已知问题
 
-- GitHub Actions「Mirror to Gitee」仍失败；继续用本地 `git push gitee` 补 main/tag。
-- 本机若不是发版二进制，需用户跑一次 `1api update` 才会升到 `v1.5.17`。
+- GitHub Actions「Mirror to Gitee」仍失败；本次用本地 `git push gitee` 补齐了 main/tag。
+- 本机旧二进制需用户跑一次 `1api update` 才会升到含 Pi 注入的 `v1.5.17`。
