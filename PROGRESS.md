@@ -14,7 +14,10 @@
 - 修复：Pi 扩展 baseUrl 对 anthropic 端点（`…/anthropic`）转成 OpenAI 兼容 URL（`piOpenAIBaseURL`），修掉 404。
 - 清理：删除 `models/probe.go` 未使用的 `fetchWithClient`（unused linter）。
 - 测试：新增 `TestPiBuiltinWindow` / `TestPiReadStoredWindows` / `TestMergeWindows` / `TestPiCatalogWindows` / `TestPiOpenAIBaseURL` / `TestPiPrimaryWire`；`TestPiDescribeAndApply` 覆盖 store 场景。
-- 本地 `make install` → 1api（`~/.local/bin/1api`）；`.harness/verify.sh` 预检通过。
+- GitHub Release `v1.5.19-devwork1` 成功（6 资产，tag 指向 `2685792`；修正历史遗留 tag 指向）。
+- Gitee release `798900`，6 个同名附件公开；latest = `v1.5.19-devwork1`（tag 同步修正）。
+- 本地 `make install` → `1api v1.5.19-devwork1`（`~/.local/bin/1api` + charon 符号链接）。
+- `.harness/verify.sh` 预检通过。
 
 ## 已完成（v1.5.18 发版）
 
