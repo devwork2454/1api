@@ -2,20 +2,20 @@
 
 ## 当前任务
 
-发布 `v1.5.17-devwork1`：把 Pi 全量 provider 注入与主档过滤打进 GitHub + Gitee，让 `1api update` 能装到该版。
+发布 `v1.5.18-devwork1`：模型目录解析最大上下文长度，provider 持久化后写入 Codex/Pi。
 
-### 规格（代定）
+### 规格
 
-- **版本**：`v1.5.17-devwork1`（上一发布 tag 为 `v1.5.16-devwork1`）。
-- **内容**：`5b90180` Pi 注入全部中央供应商为 `1api-[name]`；`874fed6` 只注入 High/Mid/Low 主档，避免 `/model` 被整表刷屏。
+- **版本**：`v1.5.18-devwork1`（上一发布 tag 为 `v1.5.17-devwork1`）。
+- **内容**：`a2ac2fa` 从 `/v1/models` 解析 context window；`provider.Record.contextWindows`；Codex/Pi ApplyAuth 优先目录值。
 - **GitHub**：推 `1api/main` + annotated tag，等 Release 出 6 个资产。
 - **Gitee**：推同一 tag，`scripts/sync-gitee-release.sh` 挂同名附件。
 - **验收**：
-  1. GitHub latest tag = `v1.5.17-devwork1`，6 个资产齐全。
-  2. Gitee `/releases/latest` 的 `tag_name` = `v1.5.17-devwork1`，同 6 个资产可下载。
+  1. GitHub latest tag = `v1.5.18-devwork1`，6 个资产齐全。
+  2. Gitee `/releases/latest` 的 `tag_name` = `v1.5.18-devwork1`，同 6 个资产可下载。
   3. `.harness/verify.sh` 为 0。
-- **回滚点**：`v1.5.16-devwork1`。
-- **不做什么**：不改业务逻辑；不把 token 写入仓库；不同步更旧附件；不提交 `.agent/`、`patch_pi*.js` 等未跟踪杂项。
+- **回滚点**：`v1.5.17-devwork1`。
+- **不做什么**：不提交 `.agent/`、`patch_pi*.js`、`1api_test` 等未跟踪杂项。
 
 ## 已完成
 
@@ -58,9 +58,8 @@
 
 ## 进行中
 
-（无）
+- 发布 `v1.5.18-devwork1`（context window 解析）。
 
 ## 未开始 / 已知问题
 
-- GitHub Actions「Mirror to Gitee」仍失败；本次用本地 `git push gitee` 补齐了 main/tag。
-- 本机旧二进制需用户跑一次 `1api update` 才会升到含 Pi 注入的 `v1.5.17`。
+- GitHub Actions「Mirror to Gitee」仍失败；本次用本地 `git push gitee` 补齐 main/tag。
