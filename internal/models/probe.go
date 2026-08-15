@@ -103,15 +103,6 @@ func fetchInfoWithClient(client *http.Client, provider Provider, endpoint, key s
 	return nil, last
 }
 
-// fetchWithClient returns only model ids (legacy helper for call sites).
-func fetchWithClient(client *http.Client, provider Provider, endpoint, key string, timeout time.Duration) ([]string, error) {
-	infos, err := fetchInfoWithClient(client, provider, endpoint, key, timeout)
-	if err != nil {
-		return nil, err
-	}
-	return ModelIDs(infos), nil
-}
-
 func fetchModelsOnce(ctx context.Context, client *http.Client, provider Provider, listURL, key string) ([]ModelInfo, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, listURL, nil)
 	if err != nil {

@@ -3,6 +3,7 @@ package tools
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	toml "github.com/pelletier/go-toml/v2"
 
 	"1api/internal/artifact"
+	"1api/internal/models"
 )
 
 // sandboxHome points HOME (and USER) at a temp dir so tool paths resolve there
@@ -651,6 +653,21 @@ func TestPiDescribeAndApply(t *testing.T) {
 	dir := filepath.Join(home, ".pi", "agent")
 	writeFile(t, filepath.Join(dir, "settings.json"), `{}`)
 
+	// Stub the live catalog as empty (like DeepSeek, whose /v1/models reports no
+	// windows) and seed pi's cached remote catalog so ApplyAuth resolves the real
+	// windows from models-store.json instead of the 128k placeholder.
+	stubPiFetchInfo(t, func(models.Provider, string, string) ([]models.ModelInfo, error) {
+		return []models.ModelInfo{}, nil
+	})
+	writeFile(t, filepath.Join(dir, "models-store.json"), `{
+  "deepseek": {
+    "models": [
+      {"id": "x/y", "name": "x/y", "contextWindow": 200000},
+      {"id": "x/z", "name": "x/z", "contextWindow": 1000000}
+    ]
+  }
+}`)
+
 	c := Find("pi")
 	if !c.Detected() {
 		t.Fatal("pi should be detected via settings.json")
@@ -689,6 +706,15 @@ func TestPiDescribeAndApply(t *testing.T) {
 	if len(cfg.Models) != 2 {
 		t.Errorf("models = %v, want 2 entries", cfg.Models)
 	}
+	// Context windows must come from pi's cached catalog (models-store.json), not
+	// the 128k placeholder.
+	windows := map[string]int{}
+	for _, m := range cfg.Models {
+		windows[m.ID] = m.ContextWindow
+	}
+	if windows["x/y"] != 200_000 || windows["x/z"] != 1_000_000 {
+		t.Errorf("extension context windows = %v, want x/y=200000 x/z=1000000", windows)
+	}
 
 	settingsPath := filepath.Join(dir, "settings.json")
 	var s map[string]any
@@ -722,6 +748,191 @@ func TestPiDescribeAndApply(t *testing.T) {
 	}
 	if info.Effort != "high" {
 		t.Errorf("Describe effort = %q, want %q", info.Effort, "high")
+	}
+}
+
+// stubPiFetchInfo swaps the live-catalog fetcher for the duration of a test so
+// ApplyAuth resolves context windows without touching the network.
+func stubPiFetchInfo(t *testing.T, fn func(models.Provider, string, string) ([]models.ModelInfo, error)) {
+	t.Helper()
+	old := piFetchInfo
+	piFetchInfo = fn
+	t.Cleanup(func() { piFetchInfo = old })
+}
+
+func TestPiCatalogWindows(t *testing.T) {
+	t.Run("known covering all ids skips the network", func(t *testing.T) {
+		calls := 0
+		stubPiFetchInfo(t, func(models.Provider, string, string) ([]models.ModelInfo, error) {
+			calls++
+			return nil, errors.New("must not be called")
+		})
+		known := map[string]int{"a": 1000, "b": 2000}
+		got := piCatalogWindows([]string{"a", "b"}, "https://x/v1", "k", models.OpenAI, known)
+		if calls != 0 {
+			t.Errorf("catalog fetched %d times, want 0 (fast path)", calls)
+		}
+		if got["a"] != 1000 || got["b"] != 2000 {
+			t.Errorf("windows = %v, want a=1000 b=2000", got)
+		}
+	})
+
+	t.Run("live catalog fills gaps and overrides stale known values", func(t *testing.T) {
+		stubPiFetchInfo(t, func(models.Provider, string, string) ([]models.ModelInfo, error) {
+			return []models.ModelInfo{
+				{ID: "a", ContextWindow: 5000},
+				{ID: "c", ContextWindow: 3000},
+			}, nil
+		})
+		got := piCatalogWindows([]string{"a", "b", "c"}, "https://x/v1", "k", models.OpenAI, map[string]int{"a": 1000, "b": 2000})
+		if got["a"] != 5000 {
+			t.Errorf("a = %d, want 5000 (live catalog wins)", got["a"])
+		}
+		if got["b"] != 2000 {
+			t.Errorf("b = %d, want 2000 (known survives for unreported ids)", got["b"])
+		}
+		if got["c"] != 3000 {
+			t.Errorf("c = %d, want 3000 (gap filled)", got["c"])
+		}
+	})
+
+	t.Run("fetch failure keeps known unchanged", func(t *testing.T) {
+		stubPiFetchInfo(t, func(models.Provider, string, string) ([]models.ModelInfo, error) {
+			return nil, errors.New("offline")
+		})
+		known := map[string]int{"a": 1000}
+		got := piCatalogWindows([]string{"a", "b"}, "https://x/v1", "k", models.OpenAI, known)
+		if got["a"] != 1000 {
+			t.Errorf("a = %d, want 1000", got["a"])
+		}
+		if _, ok := got["b"]; ok {
+			t.Errorf("b unexpectedly present: %v", got)
+		}
+	})
+
+	t.Run("nil known falls back to empty map", func(t *testing.T) {
+		stubPiFetchInfo(t, func(models.Provider, string, string) ([]models.ModelInfo, error) {
+			return nil, errors.New("offline")
+		})
+		got := piCatalogWindows([]string{"a"}, "https://x/v1", "k", models.OpenAI, nil)
+		if len(got) != 0 {
+			t.Errorf("windows = %v, want empty", got)
+		}
+	})
+}
+
+func TestPiReadStoredWindows(t *testing.T) {
+	dir := t.TempDir()
+	// Missing file → nil.
+	if got := piReadStoredWindows(dir); got != nil {
+		t.Errorf("missing file = %v, want nil", got)
+	}
+	writeFile(t, filepath.Join(dir, "models-store.json"), `{
+  "deepseek": {
+    "models": [
+      {"id": "deepseek-v4-flash", "name": "x", "contextWindow": 1000000},
+      {"id": "deepseek-v4-pro", "name": "y", "contextWindow": 0}
+    ]
+  },
+  "google": {
+    "models": [{"id": "gemini-3.1", "name": "g", "contextWindow": 1000000}]
+  }
+}`)
+	got := piReadStoredWindows(dir)
+	if got["deepseek-v4-flash"] != 1_000_000 {
+		t.Errorf("deepseek-v4-flash = %d, want 1000000", got["deepseek-v4-flash"])
+	}
+	if _, ok := got["deepseek-v4-pro"]; ok {
+		t.Errorf("zero-window model should be skipped: %v", got)
+	}
+	if got["gemini-3.1"] != 1_000_000 {
+		t.Errorf("gemini-3.1 = %d, want 1000000", got["gemini-3.1"])
+	}
+	// Corrupt file → nil.
+	writeFile(t, filepath.Join(dir, "models-store.json"), `{not json`)
+	if got := piReadStoredWindows(dir); got != nil {
+		t.Errorf("corrupt file = %v, want nil", got)
+	}
+}
+
+func TestMergeWindows(t *testing.T) {
+	got := mergeWindows(map[string]int{"a": 1000, "b": 2000}, map[string]int{"b": 0, "c": 3000})
+	if got["a"] != 1000 || got["b"] != 2000 || got["c"] != 3000 {
+		t.Errorf("merge = %v, want a=1000 b=2000 c=3000", got)
+	}
+	if got := mergeWindows(nil, nil); len(got) != 0 {
+		t.Errorf("nil merge = %v, want empty", got)
+	}
+}
+
+func TestPiOpenAIBaseURL(t *testing.T) {
+	cases := []struct {
+		endpoint string
+		want     string
+	}{
+		{"https://api.deepseek.com/anthropic", "https://api.deepseek.com"},
+		{"https://api.deepseek.com/anthropic/v1", "https://api.deepseek.com"},
+		{"https://api.openai.com/v1", "https://api.openai.com/v1"},
+		{"http://127.0.0.1:4000/v1", "http://127.0.0.1:4000/v1"},
+		{"https://llm.example.com/compatible-mode/v1", "https://llm.example.com/compatible-mode/v1"},
+	}
+	for _, tc := range cases {
+		if got := piOpenAIBaseURL(tc.endpoint); got != tc.want {
+			t.Errorf("piOpenAIBaseURL(%q) = %q, want %q", tc.endpoint, got, tc.want)
+		}
+	}
+}
+
+func TestPiBuiltinWindow(t *testing.T) {
+	cases := []struct {
+		model string
+		want  int
+	}{
+		{"deepseek-v4-flash", 1_000_000},
+		{"deepseek-v4-pro", 1_000_000},
+		{"deepseek-v4-flash-0731", 1_000_000},
+		{"glm-5.2", 1_000_000},
+		{"z-ai/glm-5.2", 1_000_000},
+		{"grok-4.5", 500_000},
+		{"grok-4.20", 1_000_000},
+		{"claude-sonnet-4.5", 0}, // Claude handled by claudeContextWindow, not builtin
+		{"unknown-model-xyz", 0},
+	}
+	for _, tc := range cases {
+		if got := piBuiltinWindow(tc.model); got != tc.want {
+			t.Errorf("piBuiltinWindow(%q) = %d, want %d", tc.model, got, tc.want)
+		}
+	}
+	// known overrides builtin; builtin beats the 128k default.
+	if w := piContextWindow("glm-5.2", map[string]int{"glm-5.2": 200_000}); w != 200_000 {
+		t.Errorf("known should override builtin, got %d", w)
+	}
+	if w := piContextWindow("deepseek-v4-flash-0731", nil); w != 1_000_000 {
+		t.Errorf("builtin should beat default, got %d", w)
+	}
+	if w := piContextWindow("claude-opus-4-8", nil); w != 200_000 {
+		t.Errorf("claude heuristic should apply, got %d", w)
+	}
+}
+
+func TestPiPrimaryWire(t *testing.T) {
+	cases := []struct {
+		endpoint string
+		want     models.Provider
+	}{
+		{"https://api.deepseek.com/anthropic", models.Anthropic},
+		{"https://api.deepseek.com/anthropic/v1", models.Anthropic},
+		{"https://api.openai.com/v1", models.OpenAI},
+		{"http://127.0.0.1:4000/v1", models.OpenAI},
+		{"https://openrouter.ai/api/v1", models.OpenAI},
+	}
+	for _, tc := range cases {
+		if got := piPrimaryWire(tc.endpoint); got != tc.want {
+			t.Errorf("piPrimaryWire(%q) = %v, want %v", tc.endpoint, got, tc.want)
+		}
+	}
+	if piOtherWire(models.Anthropic) != models.OpenAI || piOtherWire(models.OpenAI) != models.Anthropic {
+		t.Error("piOtherWire should return the opposite format")
 	}
 }
 

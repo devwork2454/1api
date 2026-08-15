@@ -8,8 +8,10 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
 	"1api/internal/artifact"
+	"1api/internal/models"
 	"1api/internal/provider"
 )
 
@@ -59,6 +61,31 @@ func piEscapeValue(s string) string {
 	return s
 }
 
+// piBuiltinWindow returns a verified context window for well-known models whose
+// own catalogs don't report one (e.g. DeepSeek's /v1/models returns ids only,
+// and third-party gateways like Aliyun/NVIDIA proxy them without metadata). Only
+// values confirmed from the model vendor's catalog are listed; unknown models
+// return 0 and fall through to the generic default.
+func piBuiltinWindow(model string) int {
+	lower := strings.ToLower(strings.TrimSpace(model))
+	switch {
+	case strings.HasPrefix(lower, "deepseek-v4-"):
+		// DeepSeek V4 family: 1M (vendor /models reports ids only; pi.dev catalog
+		// confirms deepseek-v4-flash/pro = 1M, snapshot variants share it).
+		return 1_000_000
+	case strings.Contains(lower, "glm-5.2"):
+		// Zhipu GLM-5.2 (incl. z-ai/glm-5.2): 1M per vendor docs.
+		return 1_000_000
+	case strings.Contains(lower, "grok-4.5"):
+		// xAI grok-4.5: 500k (confirmed from api.x.ai catalog context_length).
+		return 500_000
+	case strings.Contains(lower, "grok-4.20"):
+		// xAI grok-4.20: 1M (confirmed from api.x.ai catalog context_length).
+		return 1_000_000
+	}
+	return 0
+}
+
 // piContextWindow mirrors claudeContextWindow's Claude-model special-case, plus a
 // generic default for everything else. known overrides when the catalog reported a window.
 func piContextWindow(model string, known map[string]int) int {
@@ -67,10 +94,173 @@ func piContextWindow(model string, known map[string]int) int {
 			return w
 		}
 	}
+	if w := piBuiltinWindow(model); w != 0 {
+		return w
+	}
 	if w := claudeContextWindow(model); w != 0 {
 		return w
 	}
 	return 128_000
+}
+
+// piFetchInfo is swappable in tests; production uses models.FetchInfo. Catalog
+// lookups are best-effort and never block writing the extension on failure.
+var piFetchInfo = models.FetchInfo
+
+// piReadStoredWindows loads id → contextWindow from pi's cached remote catalog
+// (models-store.json, populated by pi from https://pi.dev). Some gateways (e.g.
+// DeepSeek) don't report windows on their own /v1/models, so this is the only
+// reliable source for those models' real windows — and it keeps 1api's extension
+// consistent with what pi itself displays and compacts against.
+func piReadStoredWindows(agentDir string) map[string]int {
+	data, err := os.ReadFile(filepath.Join(agentDir, "models-store.json"))
+	if err != nil {
+		return nil
+	}
+	var store map[string]struct {
+		Models []struct {
+			ID            string `json:"id"`
+			ContextWindow int    `json:"contextWindow"`
+		} `json:"models"`
+	}
+	if json.Unmarshal(data, &store) != nil {
+		return nil
+	}
+	out := map[string]int{}
+	for _, prov := range store {
+		for _, m := range prov.Models {
+			if m.ID != "" && m.ContextWindow > 0 {
+				out[m.ID] = m.ContextWindow
+			}
+		}
+	}
+	return out
+}
+
+// mergeWindows returns base plus any positive windows from fill that base lacks.
+// base (freshest source, e.g. a just-probed catalog) wins over fill (pi's cached
+// remote catalog).
+func mergeWindows(base, fill map[string]int) map[string]int {
+	out := map[string]int{}
+	for k, v := range fill {
+		if v > 0 {
+			out[k] = v
+		}
+	}
+	for k, v := range base {
+		if v > 0 {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// piWindowsMissing reports whether any id lacks a positive window in known.
+func piWindowsMissing(ids []string, known map[string]int) bool {
+	for _, id := range ids {
+		if id == "" {
+			continue
+		}
+		if known == nil || known[id] <= 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// piOpenAIBaseURL converts a provider endpoint to the OpenAI-compatible base URL
+// pi's "openai-completions" API needs. Anthropic-style endpoints (e.g. DeepSeek's
+// https://api.deepseek.com/anthropic) serve only /v1/messages; the OpenAI
+// completions route lives on the host root, so strip the /v1 and /anthropic path
+// suffixes. Endpoints that aren't Anthropic-style pass through unchanged (the
+// /v1 suffix is kept).
+func piOpenAIBaseURL(endpoint string) string {
+	base := strings.TrimRight(strings.TrimSpace(endpoint), "/")
+	if !strings.Contains(base, "/anthropic") {
+		return base
+	}
+	base = strings.TrimSuffix(base, "/v1")
+	base = strings.TrimRight(base, "/")
+	base = strings.TrimSuffix(base, "/anthropic")
+	return strings.TrimRight(base, "/")
+}
+
+// piPrimaryWire guesses the models-list wire format for the primary "1api"
+// provider. Profile auth specs don't carry the wire flag; anthropic-style
+// endpoints (e.g. DeepSeek's https://api.deepseek.com/anthropic) need the
+// Anthropic list URL and x-api-key headers.
+func piPrimaryWire(endpoint string) models.Provider {
+	base := strings.TrimRight(strings.TrimSpace(endpoint), "/")
+	if strings.HasSuffix(base, "/anthropic") || strings.Contains(base, "/anthropic/") {
+		return models.Anthropic
+	}
+	return models.OpenAI
+}
+
+// piOtherWire returns the opposite wire format, for retrying a primary provider
+// whose endpoint shape misled piPrimaryWire.
+func piOtherWire(w models.Provider) models.Provider {
+	if w == models.Anthropic {
+		return models.OpenAI
+	}
+	return models.Anthropic
+}
+
+// piCatalogWindows best-effort merges fresh context windows from the live model
+// catalog into known (stored catalog / prior parse). Freshly reported windows
+// win; known values survive for ids the endpoint didn't report (proxy aliases
+// like high/mid/low). A failure returns known unchanged — offline must never
+// block writing the pi extension.
+func piCatalogWindows(ids []string, endpoint, key string, wire models.Provider, known map[string]int) map[string]int {
+	out := known
+	if out == nil {
+		out = map[string]int{}
+	}
+	// Fast path: every target id already has a window — no network needed.
+	if !piWindowsMissing(ids, out) {
+		return out
+	}
+	if infos, err := piFetchInfo(wire, endpoint, key); err == nil {
+		for _, m := range infos {
+			if m.ID != "" && m.ContextWindow > 0 {
+				out[m.ID] = m.ContextWindow
+			}
+		}
+	}
+	return out
+}
+
+// piFetchJob is one provider's best-effort context-window lookup.
+type piFetchJob struct {
+	name     string
+	ids      []string
+	endpoint string
+	key      string
+	wire     models.Provider
+	known    map[string]int
+}
+
+// piFetchAllWindows runs all catalog lookups concurrently (each is bounded by
+// models.FetchInfo's timeout) and returns a name → windows map.
+func piFetchAllWindows(jobs []piFetchJob) map[string]map[string]int {
+	out := make(map[string]map[string]int, len(jobs))
+	if len(jobs) == 0 {
+		return out
+	}
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	for _, job := range jobs {
+		wg.Add(1)
+		go func(j piFetchJob) {
+			defer wg.Done()
+			w := piCatalogWindows(j.ids, j.endpoint, j.key, j.wire, j.known)
+			mu.Lock()
+			out[j.name] = w
+			mu.Unlock()
+		}(job)
+	}
+	wg.Wait()
+	return out
 }
 
 // piBuildModels turns a list of model ids into pi model entries.
@@ -210,12 +400,25 @@ func newPi() *Tool {
 				ids = []string{a.Model}
 			}
 
+			// Best-effort: resolve fresh context windows for each provider's models so
+			// pi's footer shows the real window and auto-compaction waits for it,
+			// instead of the 128k fallback. Sources, freshest first: the stored
+			// catalog (just probed), pi's cached remote catalog (models-store.json —
+			// the only source for gateways like DeepSeek whose /v1/models reports no
+			// window), then a live catalog fetch. Offline failures fall back to the
+			// heuristic without blocking the write.
+			stored := piReadStoredWindows(dir)
+			mainWire := piPrimaryWire(a.Endpoint)
+			mainWindows := piCatalogWindows(ids, a.Endpoint, a.Key, mainWire, mergeWindows(a.ContextWindows, stored))
+			if piWindowsMissing(ids, mainWindows) {
+				// Endpoint shape may have misled the wire guess; try the other format.
+				mainWindows = piCatalogWindows(ids, a.Endpoint, a.Key, piOtherWire(mainWire), mainWindows)
+			}
 			cfg := piProviderConfig{
 				Name:    "1api",
-				BaseURL: a.Endpoint,
+				BaseURL: piOpenAIBaseURL(a.Endpoint),
 				APIKey:  piEscapeValue(a.Key),
 				API:     "openai-completions",
-				Models:  piBuildModels(ids, a.ContextWindows),
 			}
 
 			var cfgs []piProviderConfig
@@ -227,6 +430,14 @@ func newPi() *Tool {
 				base = filepath.Join(h, ".config")
 			}
 			providerRoot := filepath.Join(base, "1api")
+			var recs []struct {
+				name     string
+				endpoint string
+				key      string
+				wire     string
+				ids      []string
+				known    map[string]int
+			}
 			if ps, err := provider.OpenAt(providerRoot); err == nil {
 				for _, pName := range ps.List() {
 					if rec, err := ps.Get(pName); err == nil {
@@ -258,15 +469,74 @@ func newPi() *Tool {
 							uniqIDs = []string{rec.Mid}
 						}
 
-						cfgs = append(cfgs, piProviderConfig{
-							Name:    "1api-" + pName,
-							BaseURL: rec.Endpoint,
-							APIKey:  piEscapeValue(rec.Key),
-							API:     "openai-completions",
-							Models:  piBuildModels(uniqIDs, rec.ContextWindows),
+						recs = append(recs, struct {
+							name     string
+							endpoint string
+							key      string
+							wire     string
+							ids      []string
+							known    map[string]int
+						}{
+							name:     "1api-" + pName,
+							endpoint: rec.Endpoint,
+							key:      rec.Key,
+							wire:     rec.Wire,
+							ids:      uniqIDs,
+							known:    mergeWindows(rec.ContextWindows, stored),
 						})
 					}
 				}
+			}
+
+			jobs := make([]piFetchJob, 0, len(recs))
+			for _, r := range recs {
+				jobs = append(jobs, piFetchJob{
+					name:     r.name,
+					ids:      r.ids,
+					endpoint: r.endpoint,
+					key:      r.key,
+					wire:     models.Provider(r.wire),
+					known:    r.known,
+				})
+			}
+			windowsByName := piFetchAllWindows(jobs)
+
+			// Share windows across providers: the same model id served by different
+			// gateways has the same real window (e.g. grok-4.5 via api.x.ai reports
+			// 500k, so the arcdent gateway's grok-4.5 gets it too). Fetched windows
+			// win over pi's cached remote catalog.
+			shared := map[string]int{}
+			for _, w := range windowsByName {
+				for k, v := range w {
+					if v > 0 {
+						shared[k] = v
+					}
+				}
+			}
+			for k, v := range mainWindows {
+				if v > 0 {
+					shared[k] = v
+				}
+			}
+			for k, v := range stored {
+				if v > 0 {
+					if _, ok := shared[k]; !ok {
+						shared[k] = v
+					}
+				}
+			}
+
+			// Each provider's own stored catalog is freshest; shared fills the gaps.
+			cfgs[0].Models = piBuildModels(ids, mergeWindows(a.ContextWindows, shared))
+
+			for _, r := range recs {
+				cfgs = append(cfgs, piProviderConfig{
+					Name:    r.name,
+					BaseURL: piOpenAIBaseURL(r.endpoint),
+					APIKey:  piEscapeValue(r.key),
+					API:     "openai-completions",
+					Models:  piBuildModels(r.ids, mergeWindows(r.known, shared)),
+				})
 			}
 
 			content, err := piExtensionContent(cfgs)
