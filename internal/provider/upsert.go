@@ -41,6 +41,7 @@ func (s *Store) Upsert(spec Spec, opt UpsertOptions) (Record, error) {
 
 	skip := spec.SkipVerify || opt.SkipVerify
 	var usable []string
+	var windows map[string]int
 	needsVerify := false
 	primary := strings.TrimSpace(spec.Model)
 
@@ -48,6 +49,7 @@ func (s *Store) Upsert(spec Spec, opt UpsertOptions) (Record, error) {
 		// Offline / test, or caller already ran FilterReachable and passed Usable.
 		if len(spec.Usable) > 0 {
 			usable = uniqueNonEmpty(append([]string{}, spec.Usable...))
+			windows = filterWindows(spec.ContextWindows, usable)
 			// Catalog supplied by caller (typically just probed) — not stale.
 			needsVerify = false
 		} else {
@@ -58,16 +60,19 @@ func (s *Store) Upsert(spec Spec, opt UpsertOptions) (Record, error) {
 					primary = "default"
 				}
 			}
+			windows = filterWindows(spec.ContextWindows, usable)
 			// Sparse offline set — re-probe on next bind/use.
 			needsVerify = true
 		}
 	} else {
-		usable, err = models.FilterReachable(models.Provider(wire), ep, key, models.FilterOptions{
+		detail, ferr := models.FilterReachableDetail(models.Provider(wire), ep, key, models.FilterOptions{
 			HTTPClient: opt.HTTPClient,
 		})
-		if err != nil {
-			return Record{}, err
+		if ferr != nil {
+			return Record{}, ferr
 		}
+		usable = detail.Usable
+		windows = detail.ContextWindows
 		if primary != "" && !slices.Contains(usable, primary) {
 			return Record{}, fmt.Errorf("model %q is not usable (not in reachable set)", primary)
 		}
@@ -97,15 +102,16 @@ func (s *Store) Upsert(spec Spec, opt UpsertOptions) (Record, error) {
 	}
 
 	r := Record{
-		Name:        spec.Name,
-		Endpoint:    ep,
-		Key:         key,
-		Wire:        wire,
-		Mid:         tiers.Mid,
-		Low:         tiers.Low,
-		High:        tiers.High,
-		Usable:      usable,
-		NeedsVerify: needsVerify,
+		Name:           spec.Name,
+		Endpoint:       ep,
+		Key:            key,
+		Wire:           wire,
+		Mid:            tiers.Mid,
+		Low:            tiers.Low,
+		High:           tiers.High,
+		Usable:         usable,
+		ContextWindows: windows,
+		NeedsVerify:    needsVerify,
 	}
 	if err := s.write(r); err != nil {
 		return Record{}, err
@@ -126,12 +132,13 @@ func (s *Store) Refresh(name string, opt UpsertOptions) (Record, error) {
 		}
 		return cur, nil
 	}
-	usable, err := models.FilterReachable(models.Provider(cur.Wire), cur.Endpoint, cur.Key, models.FilterOptions{
+	detail, err := models.FilterReachableDetail(models.Provider(cur.Wire), cur.Endpoint, cur.Key, models.FilterOptions{
 		HTTPClient: opt.HTTPClient,
 	})
 	if err != nil {
 		return Record{}, err
 	}
+	usable := detail.Usable
 	primary := cur.Mid
 	if primary != "" && !slices.Contains(usable, primary) {
 		// Mid gone — fall back to resolver default.
@@ -156,6 +163,7 @@ func (s *Store) Refresh(name string, opt UpsertOptions) (Record, error) {
 		tiers.Mid = primary
 	}
 	cur.Usable = usable
+	cur.ContextWindows = detail.ContextWindows
 	cur.Mid = tiers.Mid
 	cur.Low = tiers.Low
 	cur.High = tiers.High
@@ -256,7 +264,8 @@ func (s *Store) EnsureReady(name string, opt UpsertOptions) (Record, error) {
 
 // ReplaceUsable writes a freshly probed model catalog without changing tiers
 // (except filling empty low/high from mid). Used after bind-time refresh.
-func (s *Store) ReplaceUsable(name string, usable []string) (Record, error) {
+// windows is optional; when nil, existing ContextWindows are pruned to usable.
+func (s *Store) ReplaceUsable(name string, usable []string, windows ...map[string]int) (Record, error) {
 	cur, err := s.Get(name)
 	if err != nil {
 		return Record{}, err
@@ -267,6 +276,11 @@ func (s *Store) ReplaceUsable(name string, usable []string) (Record, error) {
 	}
 	cur.Usable = usable
 	cur.NeedsVerify = false
+	if len(windows) > 0 && windows[0] != nil {
+		cur.ContextWindows = filterWindows(windows[0], usable)
+	} else {
+		cur.ContextWindows = filterWindows(cur.ContextWindows, usable)
+	}
 	if cur.Mid == "" {
 		tiers := models.ResolveTiers("", usable)
 		cur.Mid, cur.Low, cur.High = tiers.Mid, tiers.Low, tiers.High
@@ -297,6 +311,22 @@ func uniqueNonEmpty(ids []string) []string {
 		}
 		seen[id] = struct{}{}
 		out = append(out, id)
+	}
+	return out
+}
+
+func filterWindows(src map[string]int, usable []string) map[string]int {
+	if len(src) == 0 {
+		return nil
+	}
+	out := map[string]int{}
+	for _, id := range usable {
+		if w := src[id]; w > 0 {
+			out[id] = w
+		}
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }

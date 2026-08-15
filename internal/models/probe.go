@@ -49,10 +49,11 @@ func Probe(provider Provider, endpoint, key string, opt ProbeOptions) (ProbeResu
 		client = &http.Client{Timeout: timeout}
 	}
 
-	ids, err := fetchWithClient(client, provider, endpoint, key, timeout)
+	infos, err := fetchInfoWithClient(client, provider, endpoint, key, timeout)
 	if err != nil {
 		return ProbeResult{}, fmt.Errorf("probe list: %w", err)
 	}
+	ids := ModelIDs(infos)
 	out := ProbeResult{Models: ids}
 
 	chatModel := strings.TrimSpace(opt.ChatModel)
@@ -80,16 +81,16 @@ func containsID(ids []string, want string) bool {
 	return false
 }
 
-// fetchWithClient is Fetch with an injectable client and overall timeout context.
-func fetchWithClient(client *http.Client, provider Provider, endpoint, key string, timeout time.Duration) ([]string, error) {
+// fetchInfoWithClient is FetchInfo with an injectable client and overall timeout context.
+func fetchInfoWithClient(client *http.Client, provider Provider, endpoint, key string, timeout time.Duration) ([]ModelInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	var last error
 	for _, listURL := range listURLCandidates(provider, endpoint) {
-		ids, err := fetchModelsOnce(ctx, client, provider, listURL, key)
+		infos, err := fetchModelsOnce(ctx, client, provider, listURL, key)
 		if err == nil {
-			return ids, nil
+			return infos, nil
 		}
 		last = err
 		if ctx.Err() != nil {
@@ -102,7 +103,16 @@ func fetchWithClient(client *http.Client, provider Provider, endpoint, key strin
 	return nil, last
 }
 
-func fetchModelsOnce(ctx context.Context, client *http.Client, provider Provider, listURL, key string) ([]string, error) {
+// fetchWithClient returns only model ids (legacy helper for call sites).
+func fetchWithClient(client *http.Client, provider Provider, endpoint, key string, timeout time.Duration) ([]string, error) {
+	infos, err := fetchInfoWithClient(client, provider, endpoint, key, timeout)
+	if err != nil {
+		return nil, err
+	}
+	return ModelIDs(infos), nil
+}
+
+func fetchModelsOnce(ctx context.Context, client *http.Client, provider Provider, listURL, key string) ([]ModelInfo, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, listURL, nil)
 	if err != nil {
 		return nil, err
@@ -118,25 +128,18 @@ func fetchModelsOnce(ctx context.Context, client *http.Client, provider Provider
 		return nil, fmt.Errorf("API returned %s (check endpoint and key)", resp.Status)
 	}
 
-	var body struct {
-		Data []struct {
-			ID string `json:"id"`
-		} `json:"data"`
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if err != nil {
+		return nil, fmt.Errorf("read model list: %w", err)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	infos, err := parseModelCatalog(raw)
+	if err != nil {
+		if err == errEmptyCatalog {
+			return nil, fmt.Errorf("no models returned by %s", listURL)
+		}
 		return nil, fmt.Errorf("could not parse model list: %w", err)
 	}
-	ids := make([]string, 0, len(body.Data))
-	for _, m := range body.Data {
-		if m.ID != "" {
-			ids = append(ids, m.ID)
-		}
-	}
-	if len(ids) == 0 {
-		return nil, fmt.Errorf("no models returned by %s", listURL)
-	}
-	sortStrings(ids)
-	return ids, nil
+	return infos, nil
 }
 
 func setAuthHeaders(req *http.Request, provider Provider, key string) {
@@ -262,17 +265,4 @@ func postChatOnce(ctx context.Context, client *http.Client, provider Provider, d
 		return fmt.Errorf("API returned %s: %s", resp.Status, msg)
 	}
 	return nil
-}
-
-// sortStrings is a tiny local sort so probe does not import sort solely for tests
-// that compare against Fetch order — same as sort.Strings.
-func sortStrings(ids []string) {
-	// insertion sort is fine for typical model lists (< few hundred)
-	for i := 1; i < len(ids); i++ {
-		j := i
-		for j > 0 && ids[j-1] > ids[j] {
-			ids[j-1], ids[j] = ids[j], ids[j-1]
-			j--
-		}
-	}
 }

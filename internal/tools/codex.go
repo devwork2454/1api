@@ -25,6 +25,17 @@ func claudeContextWindow(model string) int {
 	return 0
 }
 
+// resolveContextWindow prefers a catalog-reported window, then Claude heuristic.
+// Returns 0 when Codex should leave model_context_window unset (OpenAI slugs).
+func resolveContextWindow(model string, known map[string]int) int {
+	if known != nil {
+		if w := known[model]; w > 0 {
+			return w
+		}
+	}
+	return claudeContextWindow(model)
+}
+
 // newCodex describes the OpenAI Codex CLI (~/.codex).
 func newCodex() *Tool {
 	dir := filepath.Join(home(), ".codex")
@@ -56,9 +67,9 @@ func newCodex() *Tool {
 				cfg["model"] = a.Model
 			}
 			// Codex sizes unknown (non-OpenAI) slugs at 272K > Claude's real 200K and overruns
-			// the context; pin the window for Claude models, clearing any stale prior value.
+			// the context; pin from catalog or Claude heuristic, clearing any stale prior value.
 			delete(cfg, "model_context_window")
-			if w := claudeContextWindow(a.Model); w != 0 {
+			if w := resolveContextWindow(a.Model, a.ContextWindows); w != 0 {
 				cfg["model_context_window"] = w
 			}
 			cfg["model_provider"] = "1api"

@@ -74,6 +74,7 @@ type app struct {
 	toolName       string
 	mid, low, high string
 	allModels      []string
+	modelWindows   map[string]int
 	modelFilter    string
 	delTarget      string
 	editName       string
@@ -1076,6 +1077,7 @@ func (m app) applyFetched(msg fetchedMsg) (tea.Model, tea.Cmd) {
 	}
 	m.view = aViewPickModel
 	m.allModels = msg.list
+	m.modelWindows = msg.windows
 	m.modelFilter = ""
 	m.showProvAddModels()
 	return m, nil
@@ -1107,13 +1109,16 @@ func (m app) finishAdd(skipVerify bool) (tea.Model, tea.Cmd) {
 	// Without it, SkipVerify would store only the chosen mid and bind would
 	// show a single-model list.
 	var catalog []string
+	var windows map[string]int
 	if len(m.allModels) > 0 {
 		catalog = append([]string{}, m.allModels...)
+		windows = m.modelWindows
 		skipVerify = true // already probed via fetchModelsCmd
 	}
 	r, err := ps.Upsert(provider.Spec{
 		Name: m.wiz.name, Endpoint: m.wiz.endpoint, Key: m.wiz.key,
-		Wire: m.wiz.wire, Model: m.wiz.model, Usable: catalog, SkipVerify: skipVerify,
+		Wire: m.wiz.wire, Model: m.wiz.model, Usable: catalog,
+		ContextWindows: windows, SkipVerify: skipVerify,
 	}, provider.UpsertOptions{SkipVerify: skipVerify})
 	if err != nil {
 		m.setStatus(statusErr, err.Error())
@@ -1128,6 +1133,7 @@ func (m app) finishAdd(skipVerify bool) (tea.Model, tea.Cmd) {
 	m.setStatus(statusOK, msg)
 	m.wiz = providerWiz{}
 	m.allModels = nil
+	m.modelWindows = nil
 	m.view = aViewProviders
 	m.loadProviders()
 	return m, nil

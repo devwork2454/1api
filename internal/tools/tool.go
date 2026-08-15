@@ -31,13 +31,16 @@ func (i Info) withDefaults(endpoint string) Info {
 
 // AuthSpec is a new endpoint + API key + model to write into a tool's config.
 type AuthSpec struct {
-	Endpoint   string
-	Key        string
-	Model      string
-	Low        string
-	High       string
-	AllModels  []string
-	SkipVerify bool
+	Endpoint  string
+	Key       string
+	Model     string
+	Low       string
+	High      string
+	AllModels []string
+	// ContextWindows maps model id → max context tokens from the provider catalog.
+	// Tools that pin windows (Codex, Pi) prefer these over heuristics when > 0.
+	ContextWindows map[string]int
+	SkipVerify     bool
 }
 
 // Tool describes one AI CLI's auth surface and how to summarize/reconfigure it.

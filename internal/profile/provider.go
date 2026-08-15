@@ -125,13 +125,14 @@ func (s *Store) ApplyProvider(t *tools.Tool, providerName string, skipVerify boo
 		}
 	}
 	if err := t.ApplyAuth(tools.AuthSpec{
-		Endpoint:   rec.Endpoint,
-		Key:        rec.Key,
-		Model:      rec.PrimaryModel(),
-		Low:        rec.Low,
-		High:       rec.High,
-		AllModels:  rec.Usable,
-		SkipVerify: skipVerify,
+		Endpoint:       rec.Endpoint,
+		Key:            rec.Key,
+		Model:          rec.PrimaryModel(),
+		Low:            rec.Low,
+		High:           rec.High,
+		AllModels:      rec.Usable,
+		ContextWindows: rec.ContextWindows,
+		SkipVerify:     skipVerify,
 	}); err != nil {
 		return err
 	}

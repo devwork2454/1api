@@ -28,12 +28,27 @@ type FilterOptions struct {
 	HTTPClient *http.Client
 }
 
+// FilterResult is usable model ids plus any context windows from the catalog.
+type FilterResult struct {
+	Usable         []string
+	ContextWindows map[string]int // only positive windows; may be nil
+}
+
 // FilterReachable lists models then keeps only ids that complete a 1-token chat.
 // Returns ErrNoUsableModels when the list is non-empty but every chat probe fails,
 // or when the live catalog is empty after intersection.
 func FilterReachable(provider Provider, endpoint, key string, opt FilterOptions) ([]string, error) {
+	res, err := FilterReachableDetail(provider, endpoint, key, opt)
+	if err != nil {
+		return nil, err
+	}
+	return res.Usable, nil
+}
+
+// FilterReachableDetail is FilterReachable plus context windows from the live catalog.
+func FilterReachableDetail(provider Provider, endpoint, key string, opt FilterOptions) (FilterResult, error) {
 	if strings.TrimSpace(key) == "" {
-		return nil, fmt.Errorf("filter: empty API key")
+		return FilterResult{}, fmt.Errorf("filter: empty API key")
 	}
 	overall := opt.Timeout
 	if overall <= 0 {
@@ -56,15 +71,17 @@ func FilterReachable(provider Provider, endpoint, key string, opt FilterOptions)
 	if listTO > 25*time.Second {
 		listTO = 25 * time.Second
 	}
-	ids, err := fetchWithClient(client, provider, endpoint, key, listTO)
+	infos, err := fetchInfoWithClient(client, provider, endpoint, key, listTO)
 	if err != nil {
-		return nil, fmt.Errorf("list models: %w", err)
+		return FilterResult{}, fmt.Errorf("list models: %w", err)
 	}
+	windows := ContextWindowMap(infos)
+	ids := ModelIDs(infos)
 	if len(opt.Candidates) > 0 {
 		ids = intersectSorted(opt.Candidates, ids)
 	}
 	if len(ids) == 0 {
-		return nil, ErrNoUsableModels
+		return FilterResult{}, ErrNoUsableModels
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), overall)
@@ -106,9 +123,22 @@ func FilterReachable(provider Provider, endpoint, key string, opt FilterOptions)
 	}
 	sort.Strings(okIDs)
 	if len(okIDs) == 0 {
-		return nil, ErrNoUsableModels
+		return FilterResult{}, ErrNoUsableModels
 	}
-	return okIDs, nil
+	// Keep windows only for reachable ids.
+	var kept map[string]int
+	if len(windows) > 0 {
+		kept = map[string]int{}
+		for _, id := range okIDs {
+			if w := windows[id]; w > 0 {
+				kept[id] = w
+			}
+		}
+		if len(kept) == 0 {
+			kept = nil
+		}
+	}
+	return FilterResult{Usable: okIDs, ContextWindows: kept}, nil
 }
 
 func intersectSorted(want, live []string) []string {

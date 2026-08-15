@@ -60,8 +60,13 @@ func piEscapeValue(s string) string {
 }
 
 // piContextWindow mirrors claudeContextWindow's Claude-model special-case, plus a
-// generic default for everything else.
-func piContextWindow(model string) int {
+// generic default for everything else. known overrides when the catalog reported a window.
+func piContextWindow(model string, known map[string]int) int {
+	if known != nil {
+		if w := known[model]; w > 0 {
+			return w
+		}
+	}
 	if w := claudeContextWindow(model); w != 0 {
 		return w
 	}
@@ -69,7 +74,7 @@ func piContextWindow(model string) int {
 }
 
 // piBuildModels turns a list of model ids into pi model entries.
-func piBuildModels(ids []string) []piModel {
+func piBuildModels(ids []string, known map[string]int) []piModel {
 	models := make([]piModel, 0, len(ids))
 	for _, id := range ids {
 		if id == "" {
@@ -79,7 +84,7 @@ func piBuildModels(ids []string) []piModel {
 			ID:            id,
 			Name:          id,
 			Input:         []string{"text", "image"},
-			ContextWindow: piContextWindow(id),
+			ContextWindow: piContextWindow(id, known),
 			MaxTokens:     8192,
 		})
 	}
@@ -210,7 +215,7 @@ func newPi() *Tool {
 				BaseURL: a.Endpoint,
 				APIKey:  piEscapeValue(a.Key),
 				API:     "openai-completions",
-				Models:  piBuildModels(ids),
+				Models:  piBuildModels(ids, a.ContextWindows),
 			}
 
 			var cfgs []piProviderConfig
@@ -258,7 +263,7 @@ func newPi() *Tool {
 							BaseURL: rec.Endpoint,
 							APIKey:  piEscapeValue(rec.Key),
 							API:     "openai-completions",
-							Models:  piBuildModels(uniqIDs),
+							Models:  piBuildModels(uniqIDs, rec.ContextWindows),
 						})
 					}
 				}

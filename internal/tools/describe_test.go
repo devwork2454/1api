@@ -40,6 +40,18 @@ func TestClaudeContextWindow(t *testing.T) {
 	}
 }
 
+func TestPiContextWindowPrefersCatalog(t *testing.T) {
+	if got := piContextWindow("gpt-x", map[string]int{"gpt-x": 262144}); got != 262144 {
+		t.Fatalf("catalog = %d", got)
+	}
+	if got := piContextWindow("claude-sonnet", nil); got != 200_000 {
+		t.Fatalf("claude heuristic = %d", got)
+	}
+	if got := piContextWindow("gpt-x", nil); got != 128_000 {
+		t.Fatalf("default = %d", got)
+	}
+}
+
 func TestClaudeKeyIDShortKeyReturnsAsIs(t *testing.T) {
 	if got := claudeKeyID("short"); got != "short" {
 		t.Errorf("claudeKeyID(short) = %q, want unchanged", got)

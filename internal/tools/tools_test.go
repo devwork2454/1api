@@ -150,6 +150,28 @@ func TestCodexPinsClaudeContextWindow(t *testing.T) {
 		t.Errorf("claude model should pin model_context_window=200000, got %d (set=%v)", w, ok)
 	}
 
+	// Catalog-reported window wins over Claude heuristic (e.g. 1M gateway).
+	if err := c.ApplyAuth(AuthSpec{
+		Endpoint: "https://gw/v1", Key: "sk-k123456789", Model: "claude-opus-4-7", SkipVerify: true,
+		ContextWindows: map[string]int{"claude-opus-4-7": 1_000_000},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if w, ok := window(); !ok || w != 1_000_000 {
+		t.Errorf("catalog window should pin 1000000, got %d (set=%v)", w, ok)
+	}
+
+	// Non-Claude with catalog window is still pinned (gateway model).
+	if err := c.ApplyAuth(AuthSpec{
+		Endpoint: "https://gw/v1", Key: "sk-k123456789", Model: "deepseek-v4", SkipVerify: true,
+		ContextWindows: map[string]int{"deepseek-v4": 65536},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if w, ok := window(); !ok || w != 65536 {
+		t.Errorf("catalog non-claude should pin 65536, got %d (set=%v)", w, ok)
+	}
+
 	// Switching to a model Codex knows must drop the stale pin.
 	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://gw/v1", Key: "sk-k123456789", Model: "gpt-5.5", SkipVerify: true}); err != nil {
 		t.Fatal(err)

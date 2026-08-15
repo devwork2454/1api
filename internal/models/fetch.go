@@ -79,5 +79,14 @@ func stripAnthropicAPIPath(p string) string {
 
 // Fetch returns the sorted model IDs offered by endpoint for the given key.
 func Fetch(provider Provider, endpoint, key string) ([]string, error) {
-	return fetchWithClient(http.DefaultClient, provider, endpoint, key, 20*time.Second)
+	infos, err := FetchInfo(provider, endpoint, key)
+	if err != nil {
+		return nil, err
+	}
+	return ModelIDs(infos), nil
+}
+
+// FetchInfo returns sorted model catalog entries (id + optional context window).
+func FetchInfo(provider Provider, endpoint, key string) ([]ModelInfo, error) {
+	return fetchInfoWithClient(http.DefaultClient, provider, endpoint, key, 20*time.Second)
 }

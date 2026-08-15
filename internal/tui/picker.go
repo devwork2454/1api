@@ -13,16 +13,17 @@ import (
 const minLoadDuration = 1 * time.Second
 
 type fetchedMsg struct {
-	list []string
-	err  error
+	list    []string
+	windows map[string]int
+	err     error
 }
 
 type minLoadElapsedMsg struct{}
 
 func fetchModelsCmd(provider, endpoint, key string) tea.Cmd {
 	return func() tea.Msg {
-		l, err := models.FilterReachable(models.Provider(provider), endpoint, key, models.FilterOptions{})
-		return fetchedMsg{list: l, err: err}
+		res, err := models.FilterReachableDetail(models.Provider(provider), endpoint, key, models.FilterOptions{})
+		return fetchedMsg{list: res.Usable, windows: res.ContextWindows, err: err}
 	}
 }
 

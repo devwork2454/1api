@@ -23,16 +23,17 @@ const (
 
 // Record is one named external API configuration.
 type Record struct {
-	Name        string    `json:"name"`
-	Endpoint    string    `json:"endpoint"`
-	Key         string    `json:"key"`
-	Wire        string    `json:"wire"` // openai | anthropic
-	Mid         string    `json:"mid,omitempty"`
-	Low         string    `json:"low,omitempty"`
-	High        string    `json:"high,omitempty"`
-	Usable      []string  `json:"usable,omitempty"`
-	NeedsVerify bool      `json:"needsVerify,omitempty"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	Name           string         `json:"name"`
+	Endpoint       string         `json:"endpoint"`
+	Key            string         `json:"key"`
+	Wire           string         `json:"wire"` // openai | anthropic
+	Mid            string         `json:"mid,omitempty"`
+	Low            string         `json:"low,omitempty"`
+	High           string         `json:"high,omitempty"`
+	Usable         []string       `json:"usable,omitempty"`
+	ContextWindows map[string]int `json:"contextWindows,omitempty"` // model id → tokens from catalog
+	NeedsVerify    bool           `json:"needsVerify,omitempty"`
+	UpdatedAt      time.Time      `json:"updatedAt"`
 }
 
 // Spec is the input for creating or updating a provider.
@@ -47,10 +48,18 @@ type Spec struct {
 	// Usable is an optional pre-probed model catalog. When SkipVerify and
 	// non-empty, it becomes Record.Usable (and NeedsVerify stays false).
 	Usable []string
+	// ContextWindows is optional id→window map from a prior catalog parse.
+	// Used with SkipVerify when the caller already listed models.
+	ContextWindows map[string]int
 	// SkipVerify skips FilterReachable (tests / offline / catalog already probed).
 	SkipVerify bool
 	// HTTPClient is optional; tests inject httptest via models options through Verify.
 	// Not stored on disk.
+}
+
+// ContextWindow returns the stored window for id, or 0.
+func (r Record) ContextWindow(id string) int {
+	return models.WindowFor(id, r.ContextWindows)
 }
 
 // Store is rooted at the same ~/.config/1api root as profile.Store.

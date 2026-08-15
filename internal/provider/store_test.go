@@ -130,7 +130,10 @@ func TestUpsertWithFilterReachable(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/models", func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"data": []map[string]string{{"id": "m1"}, {"id": "m2-flash"}},
+			"data": []map[string]any{
+				{"id": "m1", "context_length": 131072},
+				{"id": "m2-flash", "max_model_len": 65536},
+			},
 		})
 	})
 	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, _ *http.Request) {
@@ -162,6 +165,9 @@ func TestUpsertWithFilterReachable(t *testing.T) {
 	// flash → low
 	if r.Low != "m2-flash" {
 		t.Fatalf("low %q want m2-flash", r.Low)
+	}
+	if r.ContextWindow("m1") != 131072 || r.ContextWindow("m2-flash") != 65536 {
+		t.Fatalf("context windows %v", r.ContextWindows)
 	}
 }
 
