@@ -1,0 +1,115 @@
+# Mirror GitHub release assets to a Gitee release so the install.sh Gitee
+# fallback serves the same binaries/checksums. Requires the same repository
+# secrets as mirror-to-gitee.yml:
+#   GITEE_TOKEN  — Gitee private token (projects write)
+#   GITEE_OWNER  — Gitee user/org (optional, defaults to github owner)
+#   GITEE_REPO   — Gitee repo name (optional, default: 1api)
+# Runs after each GitHub release is published; also dispatchable to backfill.
+
+name: Gitee Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to mirror (e.g. v1.5.20-devwork1)"
+        required: true
+
+concurrency:
+  group: gitee-release
+  cancel-in-progress: true
+
+jobs:
+  assets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check secrets
+        id: check
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          if [ -z "$GITEE_TOKEN" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "GITEE_TOKEN not set; skip Gitee release mirror."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve tag
+        id: tag
+        if: steps.check.outputs.skip != 'true'
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          MANUAL_TAG: ${{ inputs.tag }}
+        run: |
+          tag="${RELEASE_TAG:-$MANUAL_TAG}"
+          if [ -z "$tag" ]; then
+            echo "no tag resolved; use the workflow_dispatch tag input" >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        if: steps.check.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ steps.tag.outputs.tag }}
+
+      - name: Push tag to Gitee
+        if: steps.check.outputs.skip != 'true'
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_OWNER: ${{ secrets.GITEE_OWNER }}
+          GITEE_REPO: ${{ secrets.GITEE_REPO }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          owner="${GITEE_OWNER:-${GITHUB_REPOSITORY_OWNER}}"
+          repo="${GITEE_REPO:-1api}"
+          remote="https://oauth2:${GITEE_TOKEN}@gitee.com/${owner}/${repo}.git"
+          git remote add gitee "$remote" 2>/dev/null || true
+          git push gitee -f "refs/tags/${TAG}:refs/tags/${TAG}"
+
+      - name: Mirror release assets to Gitee
+        if: steps.check.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_OWNER: ${{ secrets.GITEE_OWNER }}
+          GITEE_REPO: ${{ secrets.GITEE_REPO }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          owner="${GITEE_OWNER:-${GITHUB_REPOSITORY_OWNER}}"
+          repo="${GITEE_REPO:-1api}"
+          api="https://gitee.com/api/v5/repos/${owner}/${repo}/releases"
+          mkdir -p assets
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir assets --clobber
+          existing=$(curl -sf "${api}/tags/${TAG}" \
+            | python3 -c 'import json,sys
+          d = json.load(sys.stdin)
+          print("\n".join(a.get("name","") for a in d.get("assets", [])))' || true)
+          release_id=$(curl -sf "${api}/tags/${TAG}" \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))' || true)
+          if [ -z "${release_id:-}" ]; then
+            release_id=$(curl -sf -X POST "$api" \
+              -H 'Content-Type: application/json;charset=UTF-8' \
+              -d "{\"access_token\":\"${GITEE_TOKEN}\",\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"body\":\"Mirrored from GitHub release ${TAG}.\",\"prerelease\":false}" \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+          fi
+          echo "Gitee release id: ${release_id}"
+          for f in assets/*; do
+            base=$(basename "$f")
+            if printf '%s\n' "$existing" | grep -qx "$base"; then
+              echo "skip ${base} (already attached)"
+              continue
+            fi
+            echo "attaching ${base}"
+            curl -sf -X POST "${api}/${release_id}/attach_files" \
+              -F "access_token=${GITEE_TOKEN}" \
+              -F "file=@${f}" > /dev/null
+          done
+          echo "Gitee release: https://gitee.com/${owner}/${repo}/releases/tag/${TAG}"

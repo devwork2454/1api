@@ -8,9 +8,9 @@
 # Optional: also enable Gitee「仓库镜像」Pull from GitHub as a second channel:
 #   https://help.gitee.com/repository/settings/sync-between-gitee-github
 #
-# This workflow mirrors *git* (branches/tags). Release *binary* assets still
-# come from GitHub Releases; attach the same assets on Gitee if you want the
-# install.sh Gitee fallback to serve binaries.
+# This workflow mirrors *git* (branches/tags). Release *assets* are mirrored
+# separately by gitee-release.yml (Gitee API v5 attach_files) so the install.sh
+# Gitee fallback serves the same binaries as GitHub.
 
 name: Mirror to Gitee
 
@@ -66,4 +66,6 @@ jobs:
           git push gitee --prune 'refs/remotes/origin/*:refs/heads/*' 2>/dev/null || true
           # Prefer local branch tips after fetch-depth:0 checkout.
           git push gitee --all
-          git push gitee --tags
+          # Force: Gitee-side tag refs (e.g. from its own pull-mirror) reject
+          # non-fast-forward otherwise and fail the whole job.
+          git push gitee --tags --force
