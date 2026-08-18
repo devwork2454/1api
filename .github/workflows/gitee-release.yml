@@ -88,6 +88,7 @@ jobs:
           api="https://gitee.com/api/v5/repos/${owner}/${repo}/releases"
           mkdir -p assets
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir assets --clobber
+          sha=$(git rev-parse HEAD)
 
           # Gitee answers 200 with body `null` when no release matches a tag.
           existing=$(curl -s "${api}/tags/${TAG}" \
@@ -103,7 +104,7 @@ jobs:
           if [ -z "${release_id:-}" ]; then
             create_body=$(curl -s -w '\n%{http_code}' -X POST "$api" \
               -H 'Content-Type: application/json;charset=UTF-8' \
-              -d "{\"access_token\":\"${GITEE_TOKEN}\",\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"body\":\"Mirrored from GitHub release ${TAG}.\",\"prerelease\":false}")
+              -d "{\"access_token\":\"${GITEE_TOKEN}\",\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"body\":\"Mirrored from GitHub release ${TAG}.\",\"prerelease\":false,\"target_commitish\":\"${sha}\"}")
             create_json=$(printf '%s\n' "$create_body" | head -n -1)
             create_code=$(printf '%s\n' "$create_body" | tail -n 1)
             if [ "$create_code" != "201" ]; then
