@@ -246,6 +246,35 @@ func TestClaudeDescribeAndApply(t *testing.T) {
 	}
 }
 
+// TestClaudeGatewaySetsBothAuthEnvs locks in dual auth env keys for custom
+// gateways: x-api-key-only gateways (e.g. OpenCode Go /v1/messages) reject
+// Bearer, so ANTHROPIC_API_KEY must be written alongside ANTHROPIC_AUTH_TOKEN.
+func TestClaudeGatewaySetsBothAuthEnvs(t *testing.T) {
+	home := sandboxHome(t)
+	writeFile(t, filepath.Join(home, ".claude", "settings.json"), `{"theme":"dark"}`)
+	c := Find("claude")
+	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://opencode.ai/zen/go/v1", Key: "sk-gw-123456789", Model: "kimi-k3", SkipVerify: true}); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
+	var s struct {
+		Env map[string]string `json:"env"`
+	}
+	_ = json.Unmarshal(data, &s)
+	if s.Env["ANTHROPIC_BASE_URL"] != "https://opencode.ai/zen/go" {
+		t.Errorf("gateway base URL = %q", s.Env["ANTHROPIC_BASE_URL"])
+	}
+	if s.Env["ANTHROPIC_AUTH_TOKEN"] != "sk-gw-123456789" {
+		t.Errorf("gateway should keep ANTHROPIC_AUTH_TOKEN, got env=%v", s.Env)
+	}
+	if s.Env["ANTHROPIC_API_KEY"] != "sk-gw-123456789" {
+		t.Errorf("gateway should also set ANTHROPIC_API_KEY for x-api-key gateways, got env=%v", s.Env)
+	}
+	if s.Env["ANTHROPIC_MODEL"] != "kimi-k3" {
+		t.Errorf("gateway model = %q", s.Env["ANTHROPIC_MODEL"])
+	}
+}
+
 // TestClaudeSettingsMergeOwnsModelAndEffortButNotTheme locks in which settings.json
 // keys switch per profile (so each account remembers its own model/effort) versus
 // which stay a live, account-independent preference (theme).
@@ -361,18 +390,21 @@ func TestClaudeCustomEndpointUsesBearer(t *testing.T) {
 	data, _ := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
 	_ = json.Unmarshal(data, &s)
 	if s.Env["ANTHROPIC_AUTH_TOKEN"] != "sk-gw-123456789" {
-		t.Errorf("custom endpoint should use ANTHROPIC_AUTH_TOKEN, got env=%v", s.Env)
+		t.Errorf("custom endpoint should keep ANTHROPIC_AUTH_TOKEN, got env=%v", s.Env)
+	}
+	if s.Env["ANTHROPIC_API_KEY"] != "sk-gw-123456789" {
+		t.Errorf("custom endpoint should also set ANTHROPIC_API_KEY for x-api-key gateways, got env=%v", s.Env)
 	}
 	// Claude Code appends "/v1/messages" to the base URL, so a trailing "/v1"
 	// (common in OpenAI-style gateway docs) is stripped to avoid "/v1/v1".
 	if s.Env["ANTHROPIC_BASE_URL"] != "https://gateway.example" {
 		t.Errorf("custom endpoint should set normalized ANTHROPIC_BASE_URL, got env=%v", s.Env)
 	}
-	if _, hasKey := s.Env["ANTHROPIC_API_KEY"]; hasKey {
-		t.Error("custom endpoint must not also set ANTHROPIC_API_KEY")
+	if s.Env["ANTHROPIC_API_KEY"] != "sk-gw-123456789" {
+		t.Error("custom endpoint should also set ANTHROPIC_API_KEY for x-api-key gateways")
 	}
-	if bytes.Contains(data, []byte("customApiKeyResponses")) {
-		t.Error("bearer-token endpoint must not touch customApiKeyResponses")
+	if !bytes.Contains(data, []byte("customApiKeyResponses")) {
+		t.Error("gateway key should be pre-approved in customApiKeyResponses")
 	}
 	// A custom gateway's model must go through ANTHROPIC_MODEL, not the
 	// top-level "model" selector (which Claude Code validates against its

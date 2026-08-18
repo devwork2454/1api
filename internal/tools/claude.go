@@ -46,9 +46,13 @@ func newClaude() *Tool {
 
 			custom := a.Endpoint != "" && !strings.Contains(a.Endpoint, "api.anthropic.com")
 			if custom {
-				// Gateways want Bearer auth at a custom base URL.
+				// Gateways differ in auth: some want Bearer (Authorization), Anthropic-style
+				// ones want x-api-key. Write both env keys so either header satisfies the
+				// gateway; Claude Code sends x-api-key for ANTHROPIC_API_KEY.
 				env["ANTHROPIC_BASE_URL"] = normalizeClaudeBaseURL(a.Endpoint)
 				env["ANTHROPIC_AUTH_TOKEN"] = a.Key
+				env["ANTHROPIC_API_KEY"] = a.Key
+				approveClaudeAPIKey(s, a.Key)
 				// Gateway models aren't in Claude Code's catalog; the top-level "model"
 				// selector validates against it and rejects them, so route via ANTHROPIC_MODEL.
 				delete(s, "model")
