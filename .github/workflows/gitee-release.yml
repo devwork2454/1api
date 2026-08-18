@@ -88,17 +88,29 @@ jobs:
           api="https://gitee.com/api/v5/repos/${owner}/${repo}/releases"
           mkdir -p assets
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir assets --clobber
-          existing=$(curl -sf "${api}/tags/${TAG}" \
+
+          # Gitee answers 200 with body `null` when no release matches a tag.
+          existing=$(curl -s "${api}/tags/${TAG}" \
             | python3 -c 'import json,sys
-          d = json.load(sys.stdin)
-          print("\n".join(a.get("name","") for a in d.get("assets", [])))' || true)
-          release_id=$(curl -sf "${api}/tags/${TAG}" \
-            | python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))' || true)
+          raw = sys.stdin.read().strip()
+          d = json.loads(raw) if raw and raw != "null" else {}
+          print("\n".join(a.get("name", "") for a in d.get("assets", []) or []))')
+          release_id=$(curl -s "${api}/tags/${TAG}" \
+            | python3 -c 'import json,sys
+          raw = sys.stdin.read().strip()
+          d = json.loads(raw) if raw and raw != "null" else {}
+          print(d.get("id", ""))')
           if [ -z "${release_id:-}" ]; then
-            release_id=$(curl -sf -X POST "$api" \
+            create_body=$(curl -s -w '\n%{http_code}' -X POST "$api" \
               -H 'Content-Type: application/json;charset=UTF-8' \
-              -d "{\"access_token\":\"${GITEE_TOKEN}\",\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"body\":\"Mirrored from GitHub release ${TAG}.\",\"prerelease\":false}" \
-              | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+              -d "{\"access_token\":\"${GITEE_TOKEN}\",\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"body\":\"Mirrored from GitHub release ${TAG}.\",\"prerelease\":false}")
+            create_json=$(printf '%s\n' "$create_body" | head -n -1)
+            create_code=$(printf '%s\n' "$create_body" | tail -n 1)
+            if [ "$create_code" != "201" ]; then
+              echo "Gitee create release failed (HTTP ${create_code}): ${create_json}" >&2
+              exit 1
+            fi
+            release_id=$(printf '%s' "$create_json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
           fi
           echo "Gitee release id: ${release_id}"
           for f in assets/*; do
@@ -108,8 +120,13 @@ jobs:
               continue
             fi
             echo "attaching ${base}"
-            curl -sf -X POST "${api}/${release_id}/attach_files" \
+            attach_body=$(curl -s -w '\n%{http_code}' -X POST "${api}/${release_id}/attach_files" \
               -F "access_token=${GITEE_TOKEN}" \
-              -F "file=@${f}" > /dev/null
+              -F "file=@${f}")
+            attach_code=$(printf '%s\n' "$attach_body" | tail -n 1)
+            if [ "$attach_code" != "201" ]; then
+              echo "Gitee attach ${base} failed (HTTP ${attach_code}): $(printf '%s\n' "$attach_body" | head -n -1)" >&2
+              exit 1
+            fi
           done
           echo "Gitee release: https://gitee.com/${owner}/${repo}/releases/tag/${TAG}"
