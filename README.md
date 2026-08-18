@@ -135,7 +135,7 @@ not look frozen. Preferences live in `config.json` as `uiLang` and `uiSkin`.
 1api models <tool>         # list chat-usable models (--key [--endpoint] [--no-probe])
 1api verify <tool>         # probe every model; show mid/low/high + usable set
 1api provider ls           # list central providers (--json)
-1api provider add          # add provider once (--name --key [--endpoint --wire --model --low --high] [--no-verify])
+1api provider add          # add provider once (--name --key [--endpoint --wire --model --low --high] [--preset ocgo|zen] [--no-verify])
 1api provider edit <n>     # edit provider tiers/endpoint/key [--no-verify]
 1api provider rm <n>       # delete a provider
 1api provider verify <n>   # re-probe usable models + refresh mid/low/high

@@ -98,16 +98,28 @@ func cmdProviderAdd(store *profile.Store, args []string) error {
 	name := fs.String("name", "", "provider name")
 	endpoint := fs.String("endpoint", "", "API base URL")
 	key := fs.String("key", "", "API key")
-	wire := fs.String("wire", "openai", "openai or anthropic")
+	wire := fs.String("wire", "", "openai or anthropic")
 	model := fs.String("model", "", "primary/mid model id")
 	low := fs.String("low", "", "low-tier model id")
 	high := fs.String("high", "", "high-tier model id")
+	preset := fs.String("preset", "", "built-in gateway preset: "+provider.PresetNames())
 	noVerify := fs.Bool("no-verify", false, "skip connectivity probe")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *name == "" {
 		return fmt.Errorf("--name is required")
+	}
+	if *preset != "" {
+		if *endpoint != "" || *wire != "" {
+			return fmt.Errorf("--preset cannot be combined with --endpoint/--wire (the preset fills both)")
+		}
+		p, err := provider.LookupPreset(*preset)
+		if err != nil {
+			return err
+		}
+		*endpoint = p.Endpoint
+		*wire = p.Wire
 	}
 	if err := tools.ValidateKey(*key); err != nil {
 		return err
