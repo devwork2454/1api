@@ -43,6 +43,12 @@ func newClaude() *Tool {
 			delete(env, "ANTHROPIC_BASE_URL")
 			delete(env, "ANTHROPIC_MODEL")
 			delete(env, "ANTHROPIC_CUSTOM_MODEL_OPTION")
+			delete(env, "ANTHROPIC_DEFAULT_OPUS_MODEL")
+			delete(env, "ANTHROPIC_DEFAULT_SONNET_MODEL")
+			delete(env, "ANTHROPIC_DEFAULT_HAIKU_MODEL")
+			delete(env, "ANTHROPIC_OPUS_MODEL")
+			delete(env, "ANTHROPIC_SONNET_MODEL")
+			delete(env, "ANTHROPIC_HAIKU_MODEL")
 
 			custom := a.Endpoint != "" && !strings.Contains(a.Endpoint, "api.anthropic.com")
 			if custom {
@@ -58,10 +64,17 @@ func newClaude() *Tool {
 				delete(s, "model")
 				if a.Model != "" {
 					env["ANTHROPIC_MODEL"] = a.Model
+					env["ANTHROPIC_DEFAULT_SONNET_MODEL"] = a.Model
 					// Gateway model discovery only surfaces ids prefixed "claude"/"anthropic" in
 					// /model, which most gateway model ids aren't. ANTHROPIC_CUSTOM_MODEL_OPTION
 					// adds this one model to the picker regardless of its id shape.
 					env["ANTHROPIC_CUSTOM_MODEL_OPTION"] = a.Model
+				}
+				if a.High != "" {
+					env["ANTHROPIC_DEFAULT_OPUS_MODEL"] = a.High
+				}
+				if a.Low != "" {
+					env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = a.Low
 				}
 			} else {
 				// Anthropic's own API uses x-api-key. Leave ANTHROPIC_BASE_URL unset: pointing it
@@ -91,6 +104,12 @@ func newClaude() *Tool {
 			delete(env, "ANTHROPIC_BASE_URL")
 			delete(env, "ANTHROPIC_MODEL")
 			delete(env, "ANTHROPIC_CUSTOM_MODEL_OPTION")
+			delete(env, "ANTHROPIC_DEFAULT_OPUS_MODEL")
+			delete(env, "ANTHROPIC_DEFAULT_SONNET_MODEL")
+			delete(env, "ANTHROPIC_DEFAULT_HAIKU_MODEL")
+			delete(env, "ANTHROPIC_OPUS_MODEL")
+			delete(env, "ANTHROPIC_SONNET_MODEL")
+			delete(env, "ANTHROPIC_HAIKU_MODEL")
 			delete(s, "model")
 			return writeJSONMap(settingsPath, s, 0o600)
 		},

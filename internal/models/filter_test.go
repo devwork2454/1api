@@ -162,3 +162,41 @@ func TestFilterReachableListUnauthorized(t *testing.T) {
 		t.Fatalf("want list error, got %v", err)
 	}
 }
+
+func TestFilterReachableFallbackCandidatesWhenListFails(t *testing.T) {
+	// Endpoint has no /models route (e.g. specialized gateway), but chat works for specific models.
+	var sawChat atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/models":
+			http.NotFound(w, r)
+		case "/v1/messages":
+			sawChat.Add(1)
+			var body struct {
+				Model string `json:"model"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if body.Model == "deepseek-v4-pro" {
+				_ = json.NewEncoder(w).Encode(map[string]any{"id": "msg_1", "type": "message"})
+				return
+			}
+			http.Error(w, `{"error":"unsupported model"}`, 404)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	got, err := FilterReachable(Anthropic, srv.URL+"/v1", "sk-test", FilterOptions{
+		FallbackCandidates: []string{"deepseek-v4-pro", "unsupported-model"},
+		HTTPClient:         srv.Client(),
+		PerModelTimeout:    5 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("FilterReachable with FallbackCandidates failed: %v", err)
+	}
+	want := []string{"deepseek-v4-pro"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, want %v (chats=%d)", got, want, sawChat.Load())
+	}
+}

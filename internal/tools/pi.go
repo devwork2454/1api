@@ -73,9 +73,12 @@ func piBuiltinWindow(model string) int {
 		// DeepSeek V4 family: 1M (vendor /models reports ids only; pi.dev catalog
 		// confirms deepseek-v4-flash/pro = 1M, snapshot variants share it).
 		return 1_000_000
-	case strings.Contains(lower, "glm-5.2"):
-		// Zhipu GLM-5.2 (incl. z-ai/glm-5.2): 1M per vendor docs.
+	case strings.Contains(lower, "glm-5.2") || strings.Contains(lower, "glm-5.3") || strings.Contains(lower, "glm-5."):
+		// Zhipu GLM-5 family: 1M per vendor docs.
 		return 1_000_000
+	case strings.Contains(lower, "ark-code"):
+		// Volcengine Ark Coding: 200k
+		return 200_000
 	case strings.Contains(lower, "grok-4.5"):
 		// xAI grok-4.5: 500k (confirmed from api.x.ai catalog context_length).
 		return 500_000

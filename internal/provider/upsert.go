@@ -65,21 +65,44 @@ func (s *Store) Upsert(spec Spec, opt UpsertOptions) (Record, error) {
 			needsVerify = true
 		}
 	} else {
+		if spec.Low == "default" {
+			spec.Low = ""
+		}
+		if spec.High == "default" {
+			spec.High = ""
+		}
+		if primary == "default" {
+			primary = ""
+		}
+		fallbacks := uniqueNonEmpty([]string{primary, spec.Low, spec.High})
 		detail, ferr := models.FilterReachableDetail(models.Provider(wire), ep, key, models.FilterOptions{
-			HTTPClient: opt.HTTPClient,
+			FallbackCandidates: fallbacks,
+			HTTPClient:         opt.HTTPClient,
 		})
 		if ferr != nil {
 			return Record{}, ferr
 		}
 		usable = detail.Usable
 		windows = detail.ContextWindows
-		if primary != "" && !slices.Contains(usable, primary) {
-			return Record{}, fmt.Errorf("model %q is not usable (not in reachable set)", primary)
+		if primary != "" {
+			if matched, ok := findUsableModel(primary, usable); ok {
+				primary = matched
+			} else {
+				return Record{}, fmt.Errorf("model %q is not usable (not in reachable set)", primary)
+			}
 		}
-		for _, id := range []string{spec.Low, spec.High} {
-			id = strings.TrimSpace(id)
-			if id != "" && !slices.Contains(usable, id) {
-				return Record{}, fmt.Errorf("model %q is not usable (not in reachable set)", id)
+		if lo := strings.TrimSpace(spec.Low); lo != "" {
+			if matched, ok := findUsableModel(lo, usable); ok {
+				spec.Low = matched
+			} else {
+				return Record{}, fmt.Errorf("model %q is not usable (not in reachable set)", lo)
+			}
+		}
+		if hi := strings.TrimSpace(spec.High); hi != "" {
+			if matched, ok := findUsableModel(hi, usable); ok {
+				spec.High = matched
+			} else {
+				return Record{}, fmt.Errorf("model %q is not usable (not in reachable set)", hi)
 			}
 		}
 	}
@@ -132,8 +155,13 @@ func (s *Store) Refresh(name string, opt UpsertOptions) (Record, error) {
 		}
 		return cur, nil
 	}
+	fallbacks := uniqueNonEmpty([]string{cur.Mid, cur.Low, cur.High})
+	if len(fallbacks) == 0 {
+		fallbacks = cur.Usable
+	}
 	detail, err := models.FilterReachableDetail(models.Provider(cur.Wire), cur.Endpoint, cur.Key, models.FilterOptions{
-		HTTPClient: opt.HTTPClient,
+		FallbackCandidates: fallbacks,
+		HTTPClient:         opt.HTTPClient,
 	})
 	if err != nil {
 		return Record{}, err
@@ -329,4 +357,30 @@ func filterWindows(src map[string]int, usable []string) map[string]int {
 		return nil
 	}
 	return out
+}
+
+func findUsableModel(wanted string, usable []string) (string, bool) {
+	wanted = strings.TrimSpace(wanted)
+	if wanted == "" {
+		return "", false
+	}
+	if slices.Contains(usable, wanted) {
+		return wanted, true
+	}
+	wantedLower := strings.ToLower(wanted)
+	wantedNorm := strings.ReplaceAll(wantedLower, ".", "-")
+	for _, id := range usable {
+		idLower := strings.ToLower(id)
+		idNorm := strings.ReplaceAll(idLower, ".", "-")
+		if idLower == wantedLower || idNorm == wantedNorm {
+			return id, true
+		}
+		if strings.HasPrefix(idLower, wantedLower) || strings.HasPrefix(idNorm, wantedNorm) {
+			return id, true
+		}
+	}
+	if wantedLower == "ark-code-latest" || wantedLower == "ark-code" {
+		return wanted, true
+	}
+	return "", false
 }

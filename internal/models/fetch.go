@@ -17,13 +17,30 @@ const OpenAI Provider = "openai"
 // Anthropic uses GET {base}/v1/models with x-api-key + anthropic-version headers.
 const Anthropic Provider = "anthropic"
 
-// modelsURL builds the models-list URL from an endpoint, with or without a trailing "/v1".
+// hasAPIVersion reports whether base path ends with or contains an API version segment (e.g. /v1, /v3, /v1beta, /v2/...).
+func hasAPIVersion(base string) bool {
+	u, err := url.Parse(base)
+	var path string
+	if err == nil {
+		path = u.Path
+	} else {
+		path = base
+	}
+	for _, seg := range strings.Split(strings.Trim(path, "/"), "/") {
+		if strings.HasPrefix(seg, "v") && len(seg) >= 2 && seg[1] >= '0' && seg[1] <= '9' {
+			return true
+		}
+	}
+	return false
+}
+
+// modelsURL builds the models-list URL from an endpoint, respecting existing version prefixes (/v1, /v3, etc.).
 func modelsURL(endpoint string) string {
 	base := strings.TrimRight(strings.TrimSpace(endpoint), "/")
 	if base == "" {
 		base = "https://api.openai.com/v1"
 	}
-	if strings.HasSuffix(base, "/v1") || strings.Contains(base, "/v1/") {
+	if hasAPIVersion(base) {
 		return base + "/models"
 	}
 	return base + "/v1/models"

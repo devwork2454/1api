@@ -137,6 +137,7 @@ func setAuthHeaders(req *http.Request, provider Provider, key string) {
 	switch provider {
 	case Anthropic:
 		req.Header.Set("x-api-key", key)
+		req.Header.Set("Authorization", "Bearer "+key)
 		req.Header.Set("anthropic-version", "2023-06-01")
 	default:
 		req.Header.Set("Authorization", "Bearer "+key)
@@ -150,12 +151,12 @@ func chatURL(provider Provider, endpoint string) string {
 		base = "https://api.openai.com/v1"
 	}
 	if provider == Anthropic {
-		if strings.HasSuffix(base, "/v1") || strings.Contains(base, "/v1/") {
+		if hasAPIVersion(base) {
 			return base + "/messages"
 		}
 		return base + "/v1/messages"
 	}
-	if strings.HasSuffix(base, "/v1") || strings.Contains(base, "/v1/") {
+	if hasAPIVersion(base) {
 		return base + "/chat/completions"
 	}
 	return base + "/v1/chat/completions"

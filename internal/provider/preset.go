@@ -18,6 +18,20 @@ type Preset struct {
 // presets lists curated gateways. Keys come from each vendor's console.
 var presets = []Preset{
 	{
+		Name:      "ark",
+		Endpoint:  "https://ark.cn-beijing.volces.com/api/coding/v3",
+		Wire:      WireOpenAI,
+		Note:      "Volcengine Ark Coding Plan (OpenAI-compatible V3 endpoint)",
+		KeySource: "https://console.volcengine.com/ark",
+	},
+	{
+		Name:      "ark-anthropic",
+		Endpoint:  "https://ark.cn-beijing.volces.com/api/coding",
+		Wire:      WireAnthropic,
+		Note:      "Volcengine Ark Coding Plan (Anthropic-compatible endpoint for Claude Code)",
+		KeySource: "https://console.volcengine.com/ark",
+	},
+	{
 		Name:      "ocgo",
 		Endpoint:  "https://opencode.ai/zen/go/v1",
 		Wire:      WireOpenAI,

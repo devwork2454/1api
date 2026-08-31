@@ -201,7 +201,49 @@ func TestChatURL(t *testing.T) {
 	if got := chatURL(OpenAI, "http://x/v1"); got != "http://x/v1/chat/completions" {
 		t.Errorf("openai v1 = %s", got)
 	}
+	if got := chatURL(OpenAI, "https://ark.cn-beijing.volces.com/api/coding/v3"); got != "https://ark.cn-beijing.volces.com/api/coding/v3/chat/completions" {
+		t.Errorf("openai v3 = %s", got)
+	}
 	if got := chatURL(Anthropic, "http://x/v1"); got != "http://x/v1/messages" {
-		t.Errorf("anthropic = %s", got)
+		t.Errorf("anthropic v1 = %s", got)
+	}
+	if got := chatURL(Anthropic, "https://ark.cn-beijing.volces.com/api/coding"); got != "https://ark.cn-beijing.volces.com/api/coding/v1/messages" {
+		t.Errorf("anthropic bare = %s", got)
+	}
+}
+
+func TestProbeChatAnthropicBearerGateway(t *testing.T) {
+	// Gateways like Volcengine Ark Coding require Bearer on /v1/models.
+	var sawBearerList, sawMessages bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/models":
+			if r.Header.Get("Authorization") != "Bearer sk-gw" {
+				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+				return
+			}
+			sawBearerList = true
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": []map[string]string{{"id": "deepseek-v4-pro"}},
+			})
+		case "/v1/messages":
+			sawMessages = true
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "msg_1", "type": "message"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	got, err := Probe(Anthropic, srv.URL+"/v1", "sk-gw", ProbeOptions{
+		ChatModel:  "deepseek-v4-pro",
+		Timeout:    5 * time.Second,
+		HTTPClient: srv.Client(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sawBearerList || !sawMessages || !got.ChatOK {
+		t.Fatalf("anthropic bearer probe failed: sawBearer=%v sawMsg=%v got=%+v", sawBearerList, sawMessages, got)
 	}
 }

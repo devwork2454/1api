@@ -19,6 +19,11 @@ func TestModelsURL(t *testing.T) {
 		{"http://x/v1/", "http://x/v1/models"},
 		{"  http://x/v1  ", "http://x/v1/models"},
 		{"http://x/openai/v1", "http://x/openai/v1/models"},
+		{"https://ark.cn-beijing.volces.com/api/coding/v3", "https://ark.cn-beijing.volces.com/api/coding/v3/models"},
+		{"https://ark.cn-beijing.volces.com/api/v3", "https://ark.cn-beijing.volces.com/api/v3/models"},
+		{"https://ark.cn-beijing.volces.com/api/coding", "https://ark.cn-beijing.volces.com/api/coding/v1/models"},
+		{"http://x/v2", "http://x/v2/models"},
+		{"http://x/v1beta", "http://x/v1beta/models"},
 	}
 	for _, tt := range tests {
 		if got := modelsURL(tt.in); got != tt.want {

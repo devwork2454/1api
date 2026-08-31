@@ -3,7 +3,7 @@ package provider
 import "testing"
 
 func TestLookupPreset(t *testing.T) {
-	for _, id := range []string{"ocgo", "zen", "OCGO", " Zen "} {
+	for _, id := range []string{"ocgo", "zen", "ark", "ark-anthropic", "OCGO", " Zen ", " ARK "} {
 		if _, err := LookupPreset(id); err != nil {
 			t.Errorf("LookupPreset(%q) = %v, want nil", id, err)
 		}

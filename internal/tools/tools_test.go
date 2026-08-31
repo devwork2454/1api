@@ -253,7 +253,14 @@ func TestClaudeGatewaySetsBothAuthEnvs(t *testing.T) {
 	home := sandboxHome(t)
 	writeFile(t, filepath.Join(home, ".claude", "settings.json"), `{"theme":"dark"}`)
 	c := Find("claude")
-	if err := c.ApplyAuth(AuthSpec{Endpoint: "https://opencode.ai/zen/go/v1", Key: "sk-gw-123456789", Model: "kimi-k3", SkipVerify: true}); err != nil {
+	if err := c.ApplyAuth(AuthSpec{
+		Endpoint:   "https://opencode.ai/zen/go/v1",
+		Key:        "sk-gw-123456789",
+		Model:      "kimi-k3",
+		Low:        "kimi-k3-haiku",
+		High:       "kimi-k3-opus",
+		SkipVerify: true,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
@@ -272,6 +279,15 @@ func TestClaudeGatewaySetsBothAuthEnvs(t *testing.T) {
 	}
 	if s.Env["ANTHROPIC_MODEL"] != "kimi-k3" {
 		t.Errorf("gateway model = %q", s.Env["ANTHROPIC_MODEL"])
+	}
+	if s.Env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "kimi-k3" {
+		t.Errorf("gateway sonnet model = %q", s.Env["ANTHROPIC_DEFAULT_SONNET_MODEL"])
+	}
+	if s.Env["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "kimi-k3-opus" {
+		t.Errorf("gateway opus model = %q", s.Env["ANTHROPIC_DEFAULT_OPUS_MODEL"])
+	}
+	if s.Env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] != "kimi-k3-haiku" {
+		t.Errorf("gateway haiku model = %q", s.Env["ANTHROPIC_DEFAULT_HAIKU_MODEL"])
 	}
 }
 
@@ -924,7 +940,9 @@ func TestPiBuiltinWindow(t *testing.T) {
 		{"deepseek-v4-pro", 1_000_000},
 		{"deepseek-v4-flash-0731", 1_000_000},
 		{"glm-5.2", 1_000_000},
+		{"glm-5.3", 1_000_000},
 		{"z-ai/glm-5.2", 1_000_000},
+		{"ark-code-latest", 200_000},
 		{"grok-4.5", 500_000},
 		{"grok-4.20", 1_000_000},
 		{"claude-sonnet-4.5", 0}, // Claude handled by claudeContextWindow, not builtin

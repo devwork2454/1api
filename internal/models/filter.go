@@ -24,6 +24,8 @@ type FilterOptions struct {
 	Concurrency int
 	// Candidates, when non-empty, limits probes to this set intersected with the live list.
 	Candidates []string
+	// FallbackCandidates, when non-empty, are probed directly if the /models catalog fetch fails.
+	FallbackCandidates []string
 	// HTTPClient overrides the client (tests inject httptest).
 	HTTPClient *http.Client
 }
@@ -71,15 +73,24 @@ func FilterReachableDetail(provider Provider, endpoint, key string, opt FilterOp
 	if listTO > 25*time.Second {
 		listTO = 25 * time.Second
 	}
+	var windows map[string]int
+	var ids []string
+
 	infos, err := fetchInfoWithClient(client, provider, endpoint, key, listTO)
-	if err != nil {
+	if err == nil && len(infos) > 0 {
+		windows = ContextWindowMap(infos)
+		ids = ModelIDs(infos)
+		if len(opt.Candidates) > 0 {
+			ids = intersectSorted(opt.Candidates, ids)
+		}
+	} else if len(opt.FallbackCandidates) > 0 {
+		// Endpoint catalog (/models) not available or empty, but user supplied fallback candidates.
+		// Probe candidates directly.
+		ids = cleanCandidates(opt.FallbackCandidates)
+	} else if err != nil {
 		return FilterResult{}, fmt.Errorf("list models: %w", err)
 	}
-	windows := ContextWindowMap(infos)
-	ids := ModelIDs(infos)
-	if len(opt.Candidates) > 0 {
-		ids = intersectSorted(opt.Candidates, ids)
-	}
+
 	if len(ids) == 0 {
 		return FilterResult{}, ErrNoUsableModels
 	}
@@ -157,6 +168,24 @@ func intersectSorted(want, live []string) []string {
 			continue
 		}
 		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func cleanCandidates(in []string) []string {
+	seen := map[string]struct{}{}
+	var out []string
+	for _, id := range in {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
 			continue
 		}
 		seen[id] = struct{}{}
