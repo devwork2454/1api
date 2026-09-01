@@ -6,13 +6,67 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"1api/internal/artifact"
+	"1api/internal/models"
 	"1api/internal/secret"
 )
 
 const claudeKeychainService = "Claude Code-credentials"
+
+var claudeManagedEnvKeys = []string{
+	"ANTHROPIC_API_KEY",
+	"ANTHROPIC_AUTH_TOKEN",
+	"ANTHROPIC_BASE_URL",
+	"ANTHROPIC_MODEL",
+	"ANTHROPIC_CUSTOM_MODEL_OPTION",
+	"ANTHROPIC_CUSTOM_MODEL_OPTION_NAME",
+	"ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION",
+	"ANTHROPIC_DEFAULT_OPUS_MODEL",
+	"ANTHROPIC_DEFAULT_OPUS_MODEL_NAME",
+	"ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION",
+	"ANTHROPIC_DEFAULT_SONNET_MODEL",
+	"ANTHROPIC_DEFAULT_SONNET_MODEL_NAME",
+	"ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION",
+	"ANTHROPIC_DEFAULT_HAIKU_MODEL",
+	"ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME",
+	"ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION",
+	"ANTHROPIC_OPUS_MODEL",
+	"ANTHROPIC_SONNET_MODEL",
+	"ANTHROPIC_HAIKU_MODEL",
+	"CLAUDE_CODE_SUBAGENT_MODEL",
+	"CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT",
+	"CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY",
+	"CLAUDE_CODE_MAX_CONTEXT_TOKENS",
+}
+
+var (
+	canonicalSonnetSlugs = []string{
+		"claude-3-7-sonnet-20250219",
+		"claude-3-7-sonnet-latest",
+		"claude-3-5-sonnet-20241022",
+		"claude-3-5-sonnet-latest",
+		"claude-3-5-sonnet-20240620",
+		"claude-sonnet-4-6",
+	}
+
+	canonicalOpusSlugs = []string{
+		"claude-3-opus-20240229",
+		"claude-3-opus-latest",
+		"claude-opus-4-6",
+		"claude-opus-4-7",
+		"claude-opus-4-8",
+	}
+
+	canonicalHaikuSlugs = []string{
+		"claude-3-5-haiku-20241022",
+		"claude-3-5-haiku-latest",
+		"claude-3-haiku-20240307",
+		"claude-haiku-4-5",
+	}
+)
 
 // newClaude describes Claude Code: API keys in ~/.claude/settings.json, OAuth in the keychain.
 func newClaude() *Tool {
@@ -27,7 +81,8 @@ func newClaude() *Tool {
 		Artifacts: []artifact.Artifact{
 			// theme is a display preference, not per-profile auth — preserved live. model and
 			// effortLevel switch with the profile, so each account remembers its own choice.
-			artifact.NewMergedJSONFile("settings.json", settingsPath, 0o600, "env", "customApiKeyResponses", "model", "effortLevel").
+			// modelOverrides is profile-specific so custom model routing switches cleanly.
+			artifact.NewMergedJSONFile("settings.json", settingsPath, 0o600, "env", "customApiKeyResponses", "model", "effortLevel", "modelOverrides").
 				WithDisplay("model", "effortLevel"),
 			artifact.NewKeychain("credentials", claudeKeychainService, os.Getenv("USER")),
 		},
@@ -37,21 +92,29 @@ func newClaude() *Tool {
 				return err
 			}
 			env := subMap(s, "env")
-			// Clear every auth key so we never send conflicting headers or a stale base URL.
-			delete(env, "ANTHROPIC_API_KEY")
-			delete(env, "ANTHROPIC_AUTH_TOKEN")
-			delete(env, "ANTHROPIC_BASE_URL")
-			delete(env, "ANTHROPIC_MODEL")
-			delete(env, "ANTHROPIC_CUSTOM_MODEL_OPTION")
-			delete(env, "ANTHROPIC_DEFAULT_OPUS_MODEL")
-			delete(env, "ANTHROPIC_DEFAULT_SONNET_MODEL")
-			delete(env, "ANTHROPIC_DEFAULT_HAIKU_MODEL")
-			delete(env, "ANTHROPIC_OPUS_MODEL")
-			delete(env, "ANTHROPIC_SONNET_MODEL")
-			delete(env, "ANTHROPIC_HAIKU_MODEL")
+			// Clear every managed auth and routing key so we never send conflicting headers or stale routing.
+			for _, k := range claudeManagedEnvKeys {
+				delete(env, k)
+			}
 
 			custom := a.Endpoint != "" && !strings.Contains(a.Endpoint, "api.anthropic.com")
 			if custom {
+				mid := a.Model
+				high := a.High
+				low := a.Low
+				if (high == "" || low == "") && len(a.AllModels) > 0 {
+					resolved := models.ResolveTiers(mid, a.AllModels)
+					if mid == "" {
+						mid = resolved.Mid
+					}
+					if high == "" {
+						high = resolved.High
+					}
+					if low == "" {
+						low = resolved.Low
+					}
+				}
+
 				// Gateways differ in auth: some want Bearer (Authorization), Anthropic-style
 				// ones want x-api-key. Write both env keys so either header satisfies the
 				// gateway; Claude Code sends x-api-key for ANTHROPIC_API_KEY.
@@ -62,20 +125,39 @@ func newClaude() *Tool {
 				// Gateway models aren't in Claude Code's catalog; the top-level "model"
 				// selector validates against it and rejects them, so route via ANTHROPIC_MODEL.
 				delete(s, "model")
-				if a.Model != "" {
-					env["ANTHROPIC_MODEL"] = a.Model
-					env["ANTHROPIC_DEFAULT_SONNET_MODEL"] = a.Model
+
+				if mid != "" {
+					env["ANTHROPIC_MODEL"] = mid
+					env["ANTHROPIC_DEFAULT_SONNET_MODEL"] = mid
+					env["ANTHROPIC_DEFAULT_SONNET_MODEL_NAME"] = "Sonnet (" + mid + ")"
 					// Gateway model discovery only surfaces ids prefixed "claude"/"anthropic" in
 					// /model, which most gateway model ids aren't. ANTHROPIC_CUSTOM_MODEL_OPTION
 					// adds this one model to the picker regardless of its id shape.
-					env["ANTHROPIC_CUSTOM_MODEL_OPTION"] = a.Model
+					env["ANTHROPIC_CUSTOM_MODEL_OPTION"] = mid
+					env["ANTHROPIC_CUSTOM_MODEL_OPTION_NAME"] = "1api: " + mid
+					env["ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION"] = "Primary model via 1api gateway"
 				}
-				if a.High != "" {
-					env["ANTHROPIC_DEFAULT_OPUS_MODEL"] = a.High
+				if high != "" {
+					env["ANTHROPIC_DEFAULT_OPUS_MODEL"] = high
+					env["ANTHROPIC_DEFAULT_OPUS_MODEL_NAME"] = "Opus (" + high + ")"
 				}
-				if a.Low != "" {
-					env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = a.Low
+				if low != "" {
+					env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = low
+					env["ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME"] = "Haiku (" + low + ")"
+					env["CLAUDE_CODE_SUBAGENT_MODEL"] = low
 				}
+
+				// Bypass hardcoded 200k window enforcement and enable gateway model discovery
+				env["CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT"] = "1"
+				env["CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY"] = "1"
+
+				if a.ContextWindows != nil {
+					if w, ok := a.ContextWindows[mid]; ok && w > 0 {
+						env["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] = strconv.Itoa(w)
+					}
+				}
+
+				updateClaudeModelOverrides(s, mid, high, low)
 			} else {
 				// Anthropic's own API uses x-api-key. Leave ANTHROPIC_BASE_URL unset: pointing it
 				// at the default endpoint makes Claude Code treat it as a gateway and break connectors.
@@ -86,6 +168,7 @@ func newClaude() *Tool {
 				if a.Model != "" {
 					s["model"] = a.Model
 				}
+				clearClaudeModelOverrides(s)
 			}
 			return writeJSONMap(settingsPath, s, 0o600)
 		},
@@ -99,18 +182,11 @@ func newClaude() *Tool {
 				return err
 			}
 			env := subMap(s, "env")
-			delete(env, "ANTHROPIC_API_KEY")
-			delete(env, "ANTHROPIC_AUTH_TOKEN")
-			delete(env, "ANTHROPIC_BASE_URL")
-			delete(env, "ANTHROPIC_MODEL")
-			delete(env, "ANTHROPIC_CUSTOM_MODEL_OPTION")
-			delete(env, "ANTHROPIC_DEFAULT_OPUS_MODEL")
-			delete(env, "ANTHROPIC_DEFAULT_SONNET_MODEL")
-			delete(env, "ANTHROPIC_DEFAULT_HAIKU_MODEL")
-			delete(env, "ANTHROPIC_OPUS_MODEL")
-			delete(env, "ANTHROPIC_SONNET_MODEL")
-			delete(env, "ANTHROPIC_HAIKU_MODEL")
+			for _, k := range claudeManagedEnvKeys {
+				delete(env, k)
+			}
 			delete(s, "model")
+			clearClaudeModelOverrides(s)
 			return writeJSONMap(settingsPath, s, 0o600)
 		},
 		OAuthFingerprint: func() string {
@@ -255,4 +331,67 @@ func removeString(list []string, s string) []string {
 		}
 	}
 	return out
+}
+
+// updateClaudeModelOverrides maps canonical Anthropic model slugs to the target tier models
+// in modelOverrides, preserving any user-defined unmanaged overrides.
+func updateClaudeModelOverrides(s map[string]any, mid, high, low string) {
+	if mid == "" && high == "" && low == "" {
+		clearClaudeModelOverrides(s)
+		return
+	}
+	var existing map[string]any
+	if mo, ok := s["modelOverrides"].(map[string]any); ok {
+		existing = mo
+	} else {
+		existing = make(map[string]any)
+	}
+
+	for _, slug := range canonicalSonnetSlugs {
+		delete(existing, slug)
+	}
+	for _, slug := range canonicalOpusSlugs {
+		delete(existing, slug)
+	}
+	for _, slug := range canonicalHaikuSlugs {
+		delete(existing, slug)
+	}
+
+	if mid != "" {
+		for _, slug := range canonicalSonnetSlugs {
+			existing[slug] = mid
+		}
+	}
+	if high != "" {
+		for _, slug := range canonicalOpusSlugs {
+			existing[slug] = high
+		}
+	}
+	if low != "" {
+		for _, slug := range canonicalHaikuSlugs {
+			existing[slug] = low
+		}
+	}
+	s["modelOverrides"] = existing
+}
+
+// clearClaudeModelOverrides removes only the managed canonical slugs from modelOverrides.
+// If modelOverrides becomes empty, the key is removed from the settings map.
+func clearClaudeModelOverrides(s map[string]any) {
+	if mo, ok := s["modelOverrides"].(map[string]any); ok {
+		for _, slug := range canonicalSonnetSlugs {
+			delete(mo, slug)
+		}
+		for _, slug := range canonicalOpusSlugs {
+			delete(mo, slug)
+		}
+		for _, slug := range canonicalHaikuSlugs {
+			delete(mo, slug)
+		}
+		if len(mo) == 0 {
+			delete(s, "modelOverrides")
+		}
+	} else {
+		delete(s, "modelOverrides")
+	}
 }

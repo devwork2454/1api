@@ -307,8 +307,8 @@ func TestClaudeSettingsMergeOwnsModelAndEffortButNotTheme(t *testing.T) {
 		t.Fatal("settings.json artifact should implement artifact.Merger")
 	}
 
-	snapshot := []byte(`{"model":"claude-haiku","effortLevel":"low","theme":"dark"}`)
-	live := []byte(`{"model":"claude-opus","effortLevel":"medium","theme":"light"}`)
+	snapshot := []byte(`{"model":"claude-haiku","effortLevel":"low","theme":"dark","modelOverrides":{"claude-3-7-sonnet-latest":"model-a"}}`)
+	live := []byte(`{"model":"claude-opus","effortLevel":"medium","theme":"light","modelOverrides":{"claude-3-7-sonnet-latest":"model-b"}}`)
 
 	merged, err := merger.Merge(snapshot, live)
 	if err != nil {
@@ -326,6 +326,10 @@ func TestClaudeSettingsMergeOwnsModelAndEffortButNotTheme(t *testing.T) {
 	}
 	if got["theme"] != "light" {
 		t.Errorf("theme = %v, want light (theme is a live preference, not per-profile)", got["theme"])
+	}
+	mo, ok := got["modelOverrides"].(map[string]any)
+	if !ok || mo["claude-3-7-sonnet-latest"] != "model-a" {
+		t.Errorf("modelOverrides = %v, want snapshot's model-a", got["modelOverrides"])
 	}
 }
 
@@ -470,6 +474,453 @@ func TestClaudeApplyClearsStaleTopLevelModel(t *testing.T) {
 	}
 	if s.Env["ANTHROPIC_MODEL"] != "gateway-model" {
 		t.Errorf("custom endpoint model should be in ANTHROPIC_MODEL, got env=%v", s.Env)
+	}
+}
+
+func TestClaudeTierMappingTable(t *testing.T) {
+	cases := []struct {
+		name        string
+		spec        AuthSpec
+		wantSonnet  string
+		wantOpus    string
+		wantHaiku   string
+		wantCustom  string
+		wantContext string
+	}{
+		{
+			name: "all three tiers present",
+			spec: AuthSpec{
+				Endpoint:   "https://gateway.example/v1",
+				Key:        "sk-gw-12345678901234567890",
+				Model:      "kimi-k3",
+				High:       "kimi-k3-opus",
+				Low:        "kimi-k3-haiku",
+				SkipVerify: true,
+			},
+			wantSonnet: "kimi-k3",
+			wantOpus:   "kimi-k3-opus",
+			wantHaiku:  "kimi-k3-haiku",
+			wantCustom: "kimi-k3",
+		},
+		{
+			name: "mid tier only (no high or low)",
+			spec: AuthSpec{
+				Endpoint:   "https://gateway.example/v1",
+				Key:        "sk-gw-12345678901234567890",
+				Model:      "deepseek-v4",
+				SkipVerify: true,
+			},
+			wantSonnet: "deepseek-v4",
+			wantOpus:   "",
+			wantHaiku:  "",
+			wantCustom: "deepseek-v4",
+		},
+		{
+			name: "mid and high tiers only",
+			spec: AuthSpec{
+				Endpoint:   "https://gateway.example/v1",
+				Key:        "sk-gw-12345678901234567890",
+				Model:      "glm-5.2",
+				High:       "glm-5.2-high",
+				SkipVerify: true,
+			},
+			wantSonnet: "glm-5.2",
+			wantOpus:   "glm-5.2-high",
+			wantHaiku:  "",
+			wantCustom: "glm-5.2",
+		},
+		{
+			name: "mid and low tiers only",
+			spec: AuthSpec{
+				Endpoint:   "https://gateway.example/v1",
+				Key:        "sk-gw-12345678901234567890",
+				Model:      "glm-5.2",
+				Low:        "glm-5.2-low",
+				SkipVerify: true,
+			},
+			wantSonnet: "glm-5.2",
+			wantOpus:   "",
+			wantHaiku:  "glm-5.2-low",
+			wantCustom: "glm-5.2",
+		},
+		{
+			name: "with context window",
+			spec: AuthSpec{
+				Endpoint:       "https://gateway.example/v1",
+				Key:            "sk-gw-12345678901234567890",
+				Model:          "qwen-3",
+				ContextWindows: map[string]int{"qwen-3": 131072},
+				SkipVerify:     true,
+			},
+			wantSonnet:  "qwen-3",
+			wantCustom:  "qwen-3",
+			wantContext: "131072",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			home := sandboxHome(t)
+			c := Find("claude")
+			if err := c.ApplyAuth(tc.spec); err != nil {
+				t.Fatalf("ApplyAuth: %v", err)
+			}
+
+			data, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
+			if err != nil {
+				t.Fatalf("ReadFile: %v", err)
+			}
+			var s struct {
+				Model          string            `json:"model"`
+				ModelOverrides map[string]string `json:"modelOverrides"`
+				Env            map[string]string `json:"env"`
+			}
+			if err := json.Unmarshal(data, &s); err != nil {
+				t.Fatalf("Unmarshal: %v", err)
+			}
+
+			if s.Model != "" {
+				t.Errorf("top-level model must be empty on gateway, got %q", s.Model)
+			}
+			if got := s.Env["ANTHROPIC_MODEL"]; got != tc.wantSonnet {
+				t.Errorf("ANTHROPIC_MODEL = %q, want %q", got, tc.wantSonnet)
+			}
+			if got := s.Env["ANTHROPIC_DEFAULT_SONNET_MODEL"]; got != tc.wantSonnet {
+				t.Errorf("ANTHROPIC_DEFAULT_SONNET_MODEL = %q, want %q", got, tc.wantSonnet)
+			}
+			if tc.wantSonnet != "" {
+				if got := s.Env["ANTHROPIC_DEFAULT_SONNET_MODEL_NAME"]; got != "Sonnet ("+tc.wantSonnet+")" {
+					t.Errorf("ANTHROPIC_DEFAULT_SONNET_MODEL_NAME = %q, want %q", got, "Sonnet ("+tc.wantSonnet+")")
+				}
+			}
+			if got := s.Env["ANTHROPIC_CUSTOM_MODEL_OPTION"]; got != tc.wantCustom {
+				t.Errorf("ANTHROPIC_CUSTOM_MODEL_OPTION = %q, want %q", got, tc.wantCustom)
+			}
+			if got := s.Env["ANTHROPIC_DEFAULT_OPUS_MODEL"]; got != tc.wantOpus {
+				t.Errorf("ANTHROPIC_DEFAULT_OPUS_MODEL = %q, want %q", got, tc.wantOpus)
+			}
+			if tc.wantOpus != "" {
+				if got := s.Env["ANTHROPIC_DEFAULT_OPUS_MODEL_NAME"]; got != "Opus ("+tc.wantOpus+")" {
+					t.Errorf("ANTHROPIC_DEFAULT_OPUS_MODEL_NAME = %q, want %q", got, "Opus ("+tc.wantOpus+")")
+				}
+			}
+			if got := s.Env["ANTHROPIC_DEFAULT_HAIKU_MODEL"]; got != tc.wantHaiku {
+				t.Errorf("ANTHROPIC_DEFAULT_HAIKU_MODEL = %q, want %q", got, tc.wantHaiku)
+			}
+			if tc.wantHaiku != "" {
+				if got := s.Env["ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME"]; got != "Haiku ("+tc.wantHaiku+")" {
+					t.Errorf("ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME = %q, want %q", got, "Haiku ("+tc.wantHaiku+")")
+				}
+				if got := s.Env["CLAUDE_CODE_SUBAGENT_MODEL"]; got != tc.wantHaiku {
+					t.Errorf("CLAUDE_CODE_SUBAGENT_MODEL = %q, want %q", got, tc.wantHaiku)
+				}
+			}
+			if s.Env["CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT"] != "1" {
+				t.Error("CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT should be 1")
+			}
+			if s.Env["CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY"] != "1" {
+				t.Error("CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY should be 1")
+			}
+			if tc.wantContext != "" {
+				if got := s.Env["CLAUDE_CODE_MAX_CONTEXT_TOKENS"]; got != tc.wantContext {
+					t.Errorf("CLAUDE_CODE_MAX_CONTEXT_TOKENS = %q, want %q", got, tc.wantContext)
+				}
+			}
+
+			// Verify modelOverrides
+			if tc.wantSonnet != "" {
+				for _, slug := range canonicalSonnetSlugs {
+					if s.ModelOverrides[slug] != tc.wantSonnet {
+						t.Errorf("modelOverrides[%s] = %q, want %q", slug, s.ModelOverrides[slug], tc.wantSonnet)
+					}
+				}
+			}
+			if tc.wantOpus != "" {
+				for _, slug := range canonicalOpusSlugs {
+					if s.ModelOverrides[slug] != tc.wantOpus {
+						t.Errorf("modelOverrides[%s] = %q, want %q", slug, s.ModelOverrides[slug], tc.wantOpus)
+					}
+				}
+			}
+			if tc.wantHaiku != "" {
+				for _, slug := range canonicalHaikuSlugs {
+					if s.ModelOverrides[slug] != tc.wantHaiku {
+						t.Errorf("modelOverrides[%s] = %q, want %q", slug, s.ModelOverrides[slug], tc.wantHaiku)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestClaudeModelOverrides(t *testing.T) {
+	home := sandboxHome(t)
+	// Initial settings has user-defined custom override
+	writeFile(t, filepath.Join(home, ".claude", "settings.json"), `{
+		"modelOverrides": {
+			"custom-bedrock-arn": "arn:aws:bedrock:us-east-1:123456789012:model/test"
+		}
+	}`)
+
+	c := Find("claude")
+	if err := c.ApplyAuth(AuthSpec{
+		Endpoint:   "https://gateway.example/v1",
+		Key:        "sk-gw-12345678901234567890",
+		Model:      "kimi-k3",
+		High:       "kimi-k3-opus",
+		Low:        "kimi-k3-haiku",
+		SkipVerify: true,
+	}); err != nil {
+		t.Fatalf("ApplyAuth: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var s struct {
+		ModelOverrides map[string]string `json:"modelOverrides"`
+	}
+	if err := json.Unmarshal(data, &s); err != nil {
+		t.Fatal(err)
+	}
+
+	// User-defined unmanaged override must survive
+	if s.ModelOverrides["custom-bedrock-arn"] != "arn:aws:bedrock:us-east-1:123456789012:model/test" {
+		t.Errorf("user custom modelOverride lost: %v", s.ModelOverrides)
+	}
+
+	// Managed canonical slugs must be present
+	for _, slug := range canonicalSonnetSlugs {
+		if s.ModelOverrides[slug] != "kimi-k3" {
+			t.Errorf("modelOverrides[%s] = %q, want kimi-k3", slug, s.ModelOverrides[slug])
+		}
+	}
+	for _, slug := range canonicalOpusSlugs {
+		if s.ModelOverrides[slug] != "kimi-k3-opus" {
+			t.Errorf("modelOverrides[%s] = %q, want kimi-k3-opus", slug, s.ModelOverrides[slug])
+		}
+	}
+	for _, slug := range canonicalHaikuSlugs {
+		if s.ModelOverrides[slug] != "kimi-k3-haiku" {
+			t.Errorf("modelOverrides[%s] = %q, want kimi-k3-haiku", slug, s.ModelOverrides[slug])
+		}
+	}
+
+	// Switch to stock endpoint: managed overrides cleared, custom override preserved
+	if err := c.ApplyAuth(AuthSpec{
+		Endpoint:   "https://api.anthropic.com",
+		Key:        "sk-ant-12345678901234567890",
+		Model:      "claude-3-7-sonnet-20250219",
+		SkipVerify: true,
+	}); err != nil {
+		t.Fatalf("ApplyAuth stock: %v", err)
+	}
+
+	data, _ = os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
+	var stockS struct {
+		Model          string            `json:"model"`
+		ModelOverrides map[string]string `json:"modelOverrides"`
+	}
+	_ = json.Unmarshal(data, &stockS)
+	if stockS.Model != "claude-3-7-sonnet-20250219" {
+		t.Errorf("stock model = %q", stockS.Model)
+	}
+	if stockS.ModelOverrides["custom-bedrock-arn"] != "arn:aws:bedrock:us-east-1:123456789012:model/test" {
+		t.Errorf("user custom modelOverride should be preserved: %v", stockS.ModelOverrides)
+	}
+	for _, slug := range canonicalSonnetSlugs {
+		if _, exists := stockS.ModelOverrides[slug]; exists {
+			t.Errorf("canonical slug %s should be cleared on stock endpoint", slug)
+		}
+	}
+}
+
+func TestClaudeTierCleanupAcrossSwitches(t *testing.T) {
+	home := sandboxHome(t)
+	// Pre-seed dirty settings with stale 3-tier envs and legacy keys
+	dirtyJSON := `{
+		"env": {
+			"ANTHROPIC_BASE_URL": "https://old-gw.example",
+			"ANTHROPIC_AUTH_TOKEN": "sk-old",
+			"ANTHROPIC_API_KEY": "sk-old",
+			"ANTHROPIC_MODEL": "old-sonnet",
+			"ANTHROPIC_DEFAULT_SONNET_MODEL": "old-sonnet",
+			"ANTHROPIC_DEFAULT_OPUS_MODEL": "old-opus",
+			"ANTHROPIC_DEFAULT_HAIKU_MODEL": "old-haiku",
+			"ANTHROPIC_OPUS_MODEL": "legacy-opus",
+			"ANTHROPIC_SONNET_MODEL": "legacy-sonnet",
+			"ANTHROPIC_HAIKU_MODEL": "legacy-haiku",
+			"ANTHROPIC_CUSTOM_MODEL_OPTION": "old-sonnet",
+			"USER_PROXY": "http://proxy.local"
+		}
+	}`
+	writeFile(t, filepath.Join(home, ".claude", "settings.json"), dirtyJSON)
+
+	c := Find("claude")
+	if err := c.ApplyAuth(AuthSpec{
+		Endpoint:   "https://new-gw.example/v1",
+		Key:        "sk-new-12345678901234567890",
+		Model:      "new-mid",
+		SkipVerify: true,
+	}); err != nil {
+		t.Fatalf("ApplyAuth: %v", err)
+	}
+
+	data, _ := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
+	var s struct {
+		Env map[string]string `json:"env"`
+	}
+	_ = json.Unmarshal(data, &s)
+
+	for _, staleKey := range []string{
+		"ANTHROPIC_DEFAULT_OPUS_MODEL",
+		"ANTHROPIC_DEFAULT_HAIKU_MODEL",
+		"ANTHROPIC_OPUS_MODEL",
+		"ANTHROPIC_SONNET_MODEL",
+		"ANTHROPIC_HAIKU_MODEL",
+	} {
+		if val, exists := s.Env[staleKey]; exists {
+			t.Errorf("stale key %s should have been deleted, but got %q", staleKey, val)
+		}
+	}
+
+	if s.Env["ANTHROPIC_MODEL"] != "new-mid" || s.Env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "new-mid" {
+		t.Errorf("new mid model not set properly: %v", s.Env)
+	}
+	if s.Env["USER_PROXY"] != "http://proxy.local" {
+		t.Errorf("unrelated env USER_PROXY must be preserved, got %q", s.Env["USER_PROXY"])
+	}
+}
+
+func TestClaudePreservesUnrelatedSettingsAndEnv(t *testing.T) {
+	home := sandboxHome(t)
+	initial := `{
+		"theme": "light",
+		"alwaysApprove": true,
+		"allowedTools": ["Bash", "Glob"],
+		"editor": "cursor",
+		"mcpServers": {
+			"memory": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-memory"]}
+		},
+		"env": {
+			"HTTP_PROXY": "http://127.0.0.1:8080",
+			"DEBUG": "true"
+		},
+		"customApiKeyResponses": {
+			"approved": ["user-manual-key-id-1"],
+			"disabled": ["user-disabled-key-id-2"]
+		}
+	}`
+	writeFile(t, filepath.Join(home, ".claude", "settings.json"), initial)
+
+	c := Find("claude")
+	key := "sk-ant-gw-abcdefghij0123456789"
+	keyID := key[len(key)-claudeKeyIDLen:]
+
+	if err := c.ApplyAuth(AuthSpec{
+		Endpoint:   "https://custom-gw.ai/v1",
+		Key:        key,
+		Model:      "custom-mid",
+		SkipVerify: true,
+	}); err != nil {
+		t.Fatalf("ApplyAuth: %v", err)
+	}
+
+	data, _ := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
+	var s struct {
+		Theme         string            `json:"theme"`
+		AlwaysApprove bool              `json:"alwaysApprove"`
+		AllowedTools  []string          `json:"allowedTools"`
+		Editor        string            `json:"editor"`
+		MCPServers    map[string]any    `json:"mcpServers"`
+		Env           map[string]string `json:"env"`
+		Resp          struct {
+			Approved []string `json:"approved"`
+			Disabled []string `json:"disabled"`
+		} `json:"customApiKeyResponses"`
+	}
+	if err := json.Unmarshal(data, &s); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+
+	if s.Theme != "light" || !s.AlwaysApprove || s.Editor != "cursor" {
+		t.Errorf("user preferences corrupted: Theme=%q, AlwaysApprove=%v, Editor=%q", s.Theme, s.AlwaysApprove, s.Editor)
+	}
+	if len(s.AllowedTools) != 2 || s.AllowedTools[0] != "Bash" {
+		t.Errorf("allowedTools corrupted: %v", s.AllowedTools)
+	}
+	if s.MCPServers["memory"] == nil {
+		t.Errorf("mcpServers corrupted: %v", s.MCPServers)
+	}
+	if s.Env["HTTP_PROXY"] != "http://127.0.0.1:8080" || s.Env["DEBUG"] != "true" {
+		t.Errorf("user env variables dropped: %v", s.Env)
+	}
+	if !contains(s.Resp.Approved, "user-manual-key-id-1") || !contains(s.Resp.Approved, keyID) {
+		t.Errorf("approved keys missing expected elements: %v", s.Resp.Approved)
+	}
+	if !contains(s.Resp.Disabled, "user-disabled-key-id-2") {
+		t.Errorf("disabled keys dropped: %v", s.Resp.Disabled)
+	}
+
+	// UseOfficialAuth should also preserve unrelated fields
+	if err := c.UseOfficialAuth(); err != nil {
+		t.Fatalf("UseOfficialAuth: %v", err)
+	}
+	data, _ = os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
+	_ = json.Unmarshal(data, &s)
+	if s.Theme != "light" || s.Env["HTTP_PROXY"] != "http://127.0.0.1:8080" {
+		t.Errorf("UseOfficialAuth dropped user settings: theme=%q, proxy=%q", s.Theme, s.Env["HTTP_PROXY"])
+	}
+}
+
+func TestClaudeAGENTSInvariants(t *testing.T) {
+	home := sandboxHome(t)
+	claudeDir := filepath.Join(home, ".claude")
+	settingsPath := filepath.Join(claudeDir, "settings.json")
+
+	// Ensure .claude directory does NOT exist prior to ApplyAuth
+	if _, err := os.Stat(claudeDir); !os.IsNotExist(err) {
+		t.Fatalf("expected .claude to be absent initially")
+	}
+
+	c := Find("claude")
+	if err := c.ApplyAuth(AuthSpec{
+		Endpoint:   "https://gateway.example/v1",
+		Key:        "sk-test-key-12345678901234567890",
+		Model:      "test-model",
+		SkipVerify: true,
+	}); err != nil {
+		t.Fatalf("ApplyAuth on missing dir failed: %v", err)
+	}
+
+	// 1. Directory permissions must be 0700
+	dirInfo, err := os.Stat(claudeDir)
+	if err != nil {
+		t.Fatalf("Stat(.claude): %v", err)
+	}
+	if perm := dirInfo.Mode().Perm(); perm != 0o700 {
+		t.Errorf(".claude dir perm = %#o, want 0700", perm)
+	}
+
+	// 2. File permissions must be 0600
+	fileInfo, err := os.Stat(settingsPath)
+	if err != nil {
+		t.Fatalf("Stat(settings.json): %v", err)
+	}
+	if perm := fileInfo.Mode().Perm(); perm != 0o600 {
+		t.Errorf("settings.json perm = %#o, want 0600", perm)
+	}
+
+	// 3. Verify no lingering temporary .1api-* files in .claude dir
+	entries, err := os.ReadDir(claudeDir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".1api-") {
+			t.Errorf("found uncleaned temp file: %s", entry.Name())
+		}
 	}
 }
 
